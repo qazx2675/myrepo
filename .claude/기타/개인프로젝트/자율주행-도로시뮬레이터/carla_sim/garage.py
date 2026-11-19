@@ -3,7 +3,8 @@
 실제 CARLA 차를 카메라가 천천히 돌며 비추고, 그 위에 메뉴를 띄운다.
   - 출발 / 엔진 튜닝(파츠 장착) / 차량 선택 / 코스 선택 / 설정 / 종료
   - 세부 조정: 출력·토크·레드라인·종감속비·기어비·접지·브레이크를 0.5% 단위로 (Shift = 5%)
-  - 다이노 테스트: CARLA 에 들어가는 토크 곡선 그대로 출력/토크 그래프, Enter 로 엔진을 돌려 측정
+  - 다이노 테스트: CARLA 에 들어가는 토크 곡선 그대로 출력/토크 그래프. W 로 직접 스로틀을 밟아 엔진을 돌리고,
+    Enter/Space = 풀스로틀 측정(최고 회전까지 자동으로 끝까지). 풀스로틀 구간을 측정 곡선으로 그린다.
   - 오른쪽 성능 표: 최고출력, 최대토크, 최고속도, 0-100, 0-200 (튜닝 화면에서는 장착 전 미리보기)
 파츠 내용과 계산은 sim/parts.py, 장착 상태는 config/garage.json (차종별, 장착 즉시 저장).
 """
@@ -37,7 +38,8 @@ COURSE_DESC = {"easy": "Town04 highway, light traffic, clear",
 TUNE_LABEL = {"power": "Engine power", "torque": "Engine torque", "redline": "Redline", "motor_power": "Motor power",
               "motor_torque": "Motor torque", "motor_rpm": "Motor max rpm", "final": "Final drive", "grip": "Tire grip",
               "brake": "Brake force"}
-DYNO_SWEEP = 4.0                                      # 다이노: 공회전 → 최고 회전까지 걸리는 시간(초)
+DYNO_SWEEP = 4.0                                      # 다이노: 풀스로틀로 공회전 → 최고 회전까지 약 몇 초
+DYNO_FALL = 1.5                                       # 다이노: 페달을 떼면 최고 회전 → 공회전까지 약 몇 초
 POWER_COL, TORQUE_COL = (255, 150, 40), (90, 180, 255)
 TIER_COL = [(150, 155, 165), (90, 200, 120), (80, 160, 255), (255, 110, 70)]   # 순정/스트리트/스포츠/레이스
 ACCENT = (255, 196, 0)
@@ -78,8 +80,9 @@ class Garage:
         self.part_i, self.level_i, self.veh_row = 0, 0, 0
         self.course_i = LEVELS.index(app.cfg["level"])
         self.fine_i, self._tune_before = 0, {}
-        self.dyno_t = None                     # 다이노 측정 중 경과 시간 (None = 멈춤)
-        self.dyno_sound = None                 # 측정 중 엔진음용 {rpm, vx, power_kw}
+        self.d_rpm, self.d_thr, self.d_auto = 0.0, 0.0, False   # 다이노: 회전수, 스로틀, 풀스로틀 측정 중
+        self.d_trace = {}                      # 풀스로틀로 측정한 값 {rpm 100 단위: (rpm, Nm, hp)}
+        self.dyno_sound = None                 # 다이노 페이지 엔진음용 {rpm, vx, power_kw, throttle}
         self.angle = 210.0
         self.msg, self.msg_until = "", 0.0
         self.f_title = i18n.font(40, bold=True)
@@ -174,11 +177,13 @@ class Garage:
                 self._tune().pop(keys[self.fine_i], None)
             elif back or enter:
                 self._leave_fine()
-        elif self.page == "dyno":
-            if enter:
-                self.dyno_t = 0.0
+        elif self.page == "dyno":                    # W 스로틀은 _dyno_tick 에서 눌린 상태로 읽음
+            if enter or k == pygame.K_SPACE:         # 풀스로틀 측정
+                self.d_auto, self.d_trace = True, {}
+            elif k == pygame.K_r:
+                self.d_trace = {}
             elif back:
-                self.dyno_t, self.dyno_sound, self.page = None, None, "main"
+                self.dyno_sound, self.page = None, "main"
         elif self.page == "vehicle":
             w, (kind, pt) = self.app.world, self._kind_pt()
             if up or down:
@@ -216,7 +221,8 @@ class Garage:
             self._tune_before = copy.deepcopy(self._installed())
             pygame.key.set_repeat(300, 80)        # 누르고 있으면 계속 조절
         elif key == "dyno":
-            self.page, self.dyno_t = "dyno", None
+            self.page, self.d_thr, self.d_auto, self.d_trace = "dyno", 0.0, False, {}
+            self.d_rpm = self._dyno_lo(self._spec(), self._kind_pt()[1])
         elif key == "vehicle":
             self.page, self.veh_row = "vehicle", 0
         elif key == "course":
@@ -267,26 +273,40 @@ class Garage:
         curve, max_rpm = curve_for(spec, pt)[:2]
         return [(r, t, t * r * 2 * math.pi / 60 / 745.7) for r, t in curve], max_rpm
 
-    def _dyno_rpm(self, spec, pt, max_rpm):
-        lo = 0.0 if pt == "ev" else spec["idle_rpm"]
-        return lo + (max_rpm - lo) * min(1.0, self.dyno_t / DYNO_SWEEP)
+    @staticmethod
+    def _dyno_lo(spec, pt):
+        return 0.0 if pt == "ev" else float(spec["idle_rpm"])
 
     def _dyno_tick(self, dt):
-        """측정 중이면 회전수를 올리고 엔진음용 값을 만든다. 레드라인 + 1초 뒤 곡선은 남긴 채 멈춘다."""
+        """다이노 엔진: 스로틀만큼 목표 회전수로, 올라갈 때는 그 회전수의 토크에 비례해 빨리 오른다.
+        최고 회전에서는 회전 제한(rev limiter)에 걸려 살짝 튕긴다. 풀스로틀 구간은 측정 곡선에 기록."""
         self.dyno_sound = None
-        if self.dyno_t is None or self.dyno_t >= DYNO_SWEEP + 1.0:
-            return
-        self.dyno_t = min(DYNO_SWEEP + 1.0, self.dyno_t + dt)
-        if self.dyno_t > DYNO_SWEEP:               # 최고 회전 찍고 페달 뗌
+        if self.page != "dyno":
             return
         spec, pt = self._spec(), self._kind_pt()[1]
         curve, max_rpm = self._dyno_curve(spec, pt)
-        rpm = self._dyno_rpm(spec, pt, max_rpm)
-        nm = _interp(curve, rpm, 1)
+        lo = self._dyno_lo(spec, pt)
+        keys = pygame.key.get_pressed()
+        want = 1.0 if self.d_auto or keys[pygame.K_w] or keys[pygame.K_UP] else 0.0
+        self.d_thr += max(-dt / 0.15, min(dt / 0.15, want - self.d_thr))        # 페달 끝까지 0.15초
+        span = max_rpm - lo
+        nm = _interp(curve, self.d_rpm, 1)
+        target = lo + span * self.d_thr
+        if target > self.d_rpm:
+            self.d_rpm = min(target, self.d_rpm + span / DYNO_SWEEP * nm / max(c[1] for c in curve) * dt)
+        else:
+            self.d_rpm = max(target, self.d_rpm - span / DYNO_FALL * dt)
+        if self.d_rpm >= max_rpm - 1:
+            self.d_rpm = max_rpm - span * 0.03                                   # 회전 제한: 연료 차단
+            self.d_auto = False                                                    # 풀스로틀 측정 끝
+        nm = _interp(curve, self.d_rpm, 1)
+        if self.d_thr > 0.98:
+            b = int(self.d_rpm // 100)
+            self.d_trace[b] = (self.d_rpm, nm, nm * self.d_rpm * 2 * math.pi / 60 / 745.7)
         ratio = spec["ev"]["reduction"] if pt == "ev" else spec["gears"][-1] * spec["final_drive"]
-        v = rpm / ratio * 2 * math.pi / 60 * spec["wheel_radius"] if pt == "ev" else 0.0   # 모터음 높이용 (엔진차는 바람 소리 없게 0)
-        self.dyno_sound = dict(rpm=rpm, vx=v,
-                               power_kw=nm * rpm * 2 * math.pi / 60 / 1000)
+        v = self.d_rpm / ratio * 2 * math.pi / 60 * spec["wheel_radius"] if pt == "ev" else 0.0   # 모터음 높이용
+        self.dyno_sound = dict(rpm=max(self.d_rpm, 1.0), vx=v, throttle=self.d_thr,
+                               power_kw=self.d_thr * nm * self.d_rpm * 2 * math.pi / 60 / 1000)
 
     def _install(self, part):
         kind = self._kind_pt()[0]
@@ -339,7 +359,7 @@ class Garage:
                  "vehicle": "Up/Down row   Left/Right change   Esc back",
                  "course": "Up/Down course   Enter go   Esc back",
                  "fine": "Up/Down item   Left/Right adjust (Shift = x10)   R reset   Esc save and back",
-                 "dyno": "Enter run the dyno   Esc back"}
+                 "dyno": "W throttle   Enter/Space full-throttle pull   R clear   Esc back"}
         self._text(surf, tr(hints[self.page]), (24, H - 28), DIM, self.f_sm)
         if self.msg and time.time() < self.msg_until:
             img = self.f_big.render(self.msg, True, GOOD)
@@ -428,23 +448,30 @@ class Garage:
         curve, max_rpm = self._dyno_curve(spec, pt)
         stock, stock_max = self._dyno_curve(P.apply_parts(self.app.specs[kind], {}, pt), pt)
         top = max(max_rpm, stock_max)
-        pk_hp = max(curve, key=lambda c: c[2])
-        pk_nm = max(curve, key=lambda c: c[1])
-        rows = [("Peak power", f"{pk_hp[2]:.0f} hp @ {pk_hp[0]:.0f} rpm"),
-                ("Peak torque", f"{pk_nm[1]:.0f} Nm @ {pk_nm[0]:.0f} rpm"),
+        meas = [self.d_trace[k_] for k_ in sorted(self.d_trace)]
+        src = meas if len(meas) > 1 else curve     # 측정값이 있으면 측정값 기준
+        pk_hp = max(src, key=lambda c: c[2])
+        pk_nm = max(src, key=lambda c: c[1])
+        rpm, thr = self.d_rpm, self.d_thr
+        now_nm = _interp(curve, rpm, 1) * thr
+        rows = [("Now", f"{rpm:.0f} rpm   {now_nm * rpm * 2 * math.pi / 60 / 745.7:.0f} hp   {now_nm:.0f} Nm"),
+                ("Peak power" if len(meas) > 1 else "Peak power (calc.)", f"{pk_hp[2]:.0f} hp @ {pk_hp[0]:.0f} rpm"),
+                ("Peak torque" if len(meas) > 1 else "Peak torque (calc.)", f"{pk_nm[1]:.0f} Nm @ {pk_nm[0]:.0f} rpm"),
                 ("Wheel power", f"{pk_hp[2] * spec['drivetrain_eff']:.0f} hp"),
                 ("Max rpm", f"{max_rpm:.0f} rpm")]
-        running = self.dyno_t is not None and self.dyno_t <= DYNO_SWEEP
-        rpm = self._dyno_rpm(spec, pt, max_rpm) if self.dyno_t is not None else None
-        if running:
-            rows = [("Now", f"{rpm:.0f} rpm"), ("", f"{_interp(curve, rpm, 2):.0f} hp   {_interp(curve, rpm, 1):.0f} Nm")] + rows
-        y = 140
+        y = 136
         for label, val in rows:
             self._text(surf, tr(label), (24, y), DIM, self.f_sm)
             self._text(surf, val, (24, y + 18), TEXT, self.f)
-            y += 50
-        self._text(surf, tr("Measuring...") if running else tr("Enter: run the dyno"), (24, y + 6),
-                   POWER_COL if running else ACCENT, self.f)
+            y += 48
+        # 스로틀 막대
+        self._text(surf, tr("Throttle {p:.0f}%", p=thr * 100), (24, y + 2), DIM, self.f_sm)
+        pygame.draw.rect(surf, (45, 50, 58), (24, y + 24, LW - 48, 12))
+        pygame.draw.rect(surf, (255, 80, 60) if thr > 0.98 else POWER_COL, (24, y + 24, int((LW - 48) * thr), 12))
+        y += 50
+        for s_, col in (("W (hold): throttle", TEXT), ("Enter / Space: full-throttle pull", ACCENT), ("R: clear graph", DIM)):
+            self._text(surf, tr(s_), (24, y), col, self.f_sm)
+            y += 22
         # 그래프 (가운데 아래): 주황 = 출력(hp), 파랑 = 토크(Nm), 흐린 선 = 순정
         gx, gw = LW + 8, W - LW - 390 - 16
         gy, gh = H - 34 - 250, 236
@@ -471,14 +498,13 @@ class Garage:
 
         line(stock, 2, hp_top, (110, 80, 50))
         line(stock, 1, nm_top, (50, 80, 110))
-        if self.dyno_t is None:                     # 측정 전: 계산된 곡선을 얇게
-            line(curve, 2, hp_top, POWER_COL)
-            line(curve, 1, nm_top, TORQUE_COL)
-        else:                                       # 측정 중: 지금 회전수까지 굵게 그려 나감
-            line(curve, 2, hp_top, POWER_COL, rpm, 3)
-            line(curve, 1, nm_top, TORQUE_COL, rpm, 3)
-            x = px + pw * rpm / top
-            pygame.draw.line(surf, (235, 235, 235), (x, py), (x, py + ph), 1)
+        line(curve, 2, hp_top, POWER_COL)            # 계산된 풀스로틀 곡선 (얇게)
+        line(curve, 1, nm_top, TORQUE_COL)
+        if len(meas) > 1:                            # 풀스로틀로 측정한 구간 (굵게)
+            line(meas, 2, hp_top, POWER_COL, width=4)
+            line(meas, 1, nm_top, TORQUE_COL, width=4)
+        x = px + pw * rpm / top
+        pygame.draw.line(surf, (235, 235, 235), (x, py), (x, py + ph), 1)
         self._text(surf, tr("faint = stock"), (gx + gw // 2, gy + 8), DIM, self.f_sm)
 
     def _page_vehicle(self, surf, W, H, LW):
