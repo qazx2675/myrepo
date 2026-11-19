@@ -28,7 +28,7 @@ from sim.vehicle import load_specs  # noqa: E402
 
 LEVEL_KEYS = tuple(LEVELS)
 VIEWS = ("cockpit", "chase", "top")
-FULL = pygame.FULLSCREEN | pygame.SCALED          # 전체화면: 게임 해상도 그대로 모니터에 맞춰 늘림 (GPU 확대)
+FULL = pygame.FULLSCREEN | pygame.SCALED          # 전체화면: 게임 해상도 그대로 모니터에 맞춰 늘림 (GPU 확대). 창도 SCALED 로 열어야 전환 가능
 ARROW = {"left": "<-", "right": "->", "change_left": "<<", "change_right": ">>", "straight": "^", "arrive": "*"}
 
 
@@ -297,7 +297,7 @@ def main():
 
     pygame.init()
     size = (a.width, a.height)
-    screen = pygame.display.set_mode(size, FULL if a.fullscreen else 0)
+    screen = pygame.display.set_mode(size, FULL if a.fullscreen else pygame.SCALED)
     pygame.display.set_caption("Autodrive road sim - CARLA")
     clock = pygame.time.Clock()
     try:
@@ -327,7 +327,7 @@ def main():
                     continue
                 if ev.key == pygame.K_F11:                # 전체화면 ↔ 창 (어느 화면에서나)
                     a.fullscreen = not a.fullscreen
-                    pygame.display.set_mode(size, FULL if a.fullscreen else 0)
+                    pygame.display.set_mode(size, FULL if a.fullscreen else pygame.SCALED)
                     continue
                 if app.menu.open:
                     if app.menu.handle(ev) == "quit":
