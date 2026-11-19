@@ -69,13 +69,13 @@ class Garage:
         if w.mode != "manual":
             w.mode = "manual"
             w._apply_auto()
-        w.enter_studio()                  # 차를 공중 작업대로 (주변 차·가로등에 가리지 않게)
+        w.enter_studio()                  # 갓길에 세우고 주변 가로등·표지판 등을 숨김 (카메라를 가리지 않게)
         w.set_view("showroom")
 
     def leave(self):
         """출발: 원래 시점(운전석 등)으로 돌아가 운전한다."""
         self.open = False
-        self.app.world.leave_studio()     # 도로 위 원래 자리로
+        self.app.world.leave_studio()     # 원래 자리로, 숨긴 구조물 다시 보이기
         self.app.view = self.app.view
 
     def update(self, dt):
