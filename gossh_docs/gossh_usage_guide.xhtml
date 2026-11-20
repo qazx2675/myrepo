@@ -58,6 +58,7 @@
     <tr><td><code>-P &lt;포트&gt;</code></td><td>SSH 포트를 바꿀 때</td><td>기본값 <code>22</code></td></tr>
     <tr><td><code>-b</code></td><td><strong>같은 결과의 서버를 묶어서 이상 서버만 찾을 때</strong></td><td>—</td></tr>
     <tr><td><code>-sv</code></td><td><strong>여러 명령의 결과를 <code>호스트|결과</code> 표로 저장할 때</strong></td><td>명령 인자 없이 실행</td></tr>
+    <tr><td><code>-lu</code></td><td><strong>시간 범위 안에 SSH 로 로그인한 계정을 서버별로 볼 때</strong></td><td>명령 인자 없이 실행</td></tr>
     <tr><td><code>-rpm</code></td><td>기준 서버와 설치 패키지(RPM)를 비교할 때</td><td>명령 인자 없이 실행</td></tr>
     <tr><td><code>-tmp</code>, <code>-limit</code>, <code>-tl</code></td><td><code>/tmp</code> 정리 설정과 <code>limits.conf</code> 표준을 적용할 때</td><td>명령 인자 없이 실행</td></tr>
     <tr><td><code>-pm</code></td><td>OS 설치 중이거나 마운트 이상인 서버를 먼저 거를 때</td><td><code>_os_install</code>, <code>_nosvrauto</code> 파일 생성</td></tr>
@@ -91,6 +92,13 @@
   <ac:plain-text-body><![CDATA[gossh -w hosts.txt -sv]]></ac:plain-text-body>
 </ac:structured-macro>
 <p>화면 안내에 따라 명령을 여러 개 입력합니다. 서버 1대로 미리 시험한 뒤 <code>next</code> 를 입력하면 모든 서버에서 실행합니다. 결과는 <code>&lt;hostfile&gt;_survey.tsv</code>(엑셀용)와 <code>&lt;hostfile&gt;_survey.txt</code> 에 저장합니다.</p>
+
+<h3>Q3-1. 어떤 계정이 서버에 SSH 로 로그인했는지 확인하려면?</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[gossh -w hosts.txt -lu]]></ac:plain-text-body>
+</ac:structured-macro>
+<p>화면 안내에 따라 시작 시간과 끝 시간을 <code>YYYYMMDDHH</code> 형식으로 입력합니다(예: <code>2026111900</code>, <code>2026111923</code>). 서버의 <code>/var/log/secure*</code> 에서 범위 안에 SSH 로그인에 성공한 계정(root 제외)과 마지막 로그인 시각을 모읍니다. 결과는 화면과 <code>&lt;hostfile&gt;_loginuser.txt</code> 에 <code>호스트|접속성공시간|계정</code> 형태로 저장합니다. 접속하지 못한 서버는 <code>호스트|-|-</code>, 로그를 읽지 못한 서버는 <code>호스트|!|!</code> 입니다.</p>
 
 <h3>Q4. 기준 서버와 패키지나 설정이 같은지 비교·적용하려면?</h3>
 <ul>

@@ -21,6 +21,7 @@
   </thead>
   <tbody>
     <tr><td>여러 서버에 같은 명령을 한 번에 실행하고 결과를 비교한다</td><td><code>gossh</code></td><td><code>gossh -w hosts.txt "명령"</code></td><td>처음이면 "gossh 사용 가이드(초보자용)" 문서를 먼저 보십시오.</td></tr>
+    <tr><td>시간 범위 안에 서버에 SSH 로 로그인한 계정을 확인한다</td><td><code>gossh</code></td><td><code>gossh -lu -w hosts.txt</code></td><td>시작·끝 시간(<code>YYYYMMDDHH</code>)을 묻습니다. 결과는 <code>&lt;hostfile&gt;_loginuser.txt</code> 에 저장합니다.</td></tr>
     <tr><td>gossh 를 처음 쓴다 (기초 사용법)</td><td><code>gossh</code> 사용 가이드</td><td>-</td><td>초보자용 문서입니다. 상세 옵션은 <code>gossh</code> 문서를 보십시오.</td></tr>
     <tr><td>AWX 로 서버 OS 설치를 등록한다 (노드정보·DHCP·PXE)</td><td><code>awx_script</code></td><td><code>bash 01.AWX_nodeinfo_V2.sh</code></td><td>OS 설치의 시작점입니다.</td></tr>
     <tr><td>OS 설치 뒤 LDAP 복원과 설정체크를 자동으로 진행한다</td><td><code>auto_setup</code></td><td><code>auto_setup</code> (상태 화면)</td><td>awx_script 의 02 등록이 성공하면 작업이 자동으로 전달됩니다.</td></tr>
