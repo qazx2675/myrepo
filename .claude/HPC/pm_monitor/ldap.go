@@ -12,11 +12,6 @@ import (
 // ldapCmdVer 는 Check.Ver 의 현재 값이다. 이보다 작은 값으로 저장된 결과는 새 형식이 아니므로 다시 조사한다.
 const ldapCmdVer = 4 // 4: OS커널·appl·dns(순서 유지)·ldap_URI·binddn·h/t + ldap_check 원문 (v0.5.0)
 
-// cfgAutoMax 는 수집 회차 하나에서 자동으로 첫 조사하는 서버의 최대 수다(계획서 4.9).
-// gossh 는 한 번에 하나(nice 10)만 돌고 회차 안에서 실행되므로, 한 회차가 길어지지 않게 나눠서 조사한다.
-// 8000대가 한꺼번에 대상이 되어도 회차(기본 60초)마다 100대씩 차례로 채워진다.
-const cfgAutoMax = 100
-
 // 원격 명령 출력 표식
 const (
 	mkCfgKern = "PM_KERN" // uname -r
@@ -300,15 +295,12 @@ func (c *Collector) ldapTargets() []string {
 	return out
 }
 
-// autoTargets 는 자동 첫 조사 대상(현재 형식 결과가 없는 서버, 호스트파일 순서) 중 앞의 max 대다.
-func (c *Collector) autoTargets(max int) []string {
+// autoTargets 는 자동 첫 조사 대상(현재 형식 결과가 없는 서버, 호스트파일 순서) 전체다. 대수 제한은 두지 않는다(동시 실행 제한은 gossh 가 건다).
+func (c *Collector) autoTargets() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var out []string
 	for _, h := range c.hosts {
-		if len(out) >= max {
-			break
-		}
 		if r := c.recs[h]; autoTarget(r) && !r.Check.current() {
 			out = append(out, h)
 		}

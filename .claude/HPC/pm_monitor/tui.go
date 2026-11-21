@@ -198,7 +198,7 @@ func (v *ViewState) runeKey(r rune) action {
 			return actNone
 		}
 		return actQuit
-	case r == panelInstall || r == panelDelay || r == panelDHCP || r == panelLDAP || r == panelYum:
+	case r == panelInstall || r == panelDelay || r == panelDHCP || r == panelLDAP || r == panelYum || r == panelDone:
 		if v.Panel == r { // 같은 키를 다시 누르면 닫는다
 			v.Panel = 0
 			return actNone
@@ -211,6 +211,11 @@ func (v *ViewState) runeKey(r rune) action {
 		if r == panelInstall && !v.Busy {
 			v.Busy, v.CheckErr = true, ""
 			return actCheck
+		}
+	case r == 'u' && v.Panel == panelLDAP: // l 패널을 연 채로 서버를 다시 조사한다(진행 중이면 무시)
+		if !v.reportBusy[panelLDAP] {
+			v.reportReq = panelLDAP
+			return actReport
 		}
 	case r == 'm' && v.Panel == panelLDAP && v.hasOK: // l 패널에서만: oklist 와 다른 서버만 보기 켜기·끄기
 		v.OnlyDiff, v.PanelScroll, v.pOK = !v.OnlyDiff, 0, false

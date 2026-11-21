@@ -348,7 +348,7 @@ func TestOldCheckVersionRequery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tg := col.autoTargets(10); len(tg) != 1 || tg[0] != "a" {
+	if tg := col.autoTargets(); len(tg) != 1 || tg[0] != "a" {
 		t.Fatalf("자동 대상 %v", tg)
 	}
 	if tbl := ldapTable(col.Snapshot()); !strings.Contains(tbl, "\na\t\t\t\t\t\t\t(조사 전)") {
@@ -438,25 +438,25 @@ func TestAutoFirstInvestigation(t *testing.T) {
 	}
 }
 
-// 한 회차의 자동 조사는 cfgAutoMax 대까지만 하고 나머지는 다음 회차로 넘긴다.
-func TestAutoInvestigationCap(t *testing.T) {
+// 한 회차의 자동 조사는 대수 제한 없이 대상 전부를 한 번에 조사한다.
+func TestAutoInvestigationNoCap(t *testing.T) {
 	f := newFake()
 	cf := &cfgFake{fail: map[string]bool{}}
 	deps := f.deps()
 	deps.Cfg = cf.query
 	var hosts []string
-	for i := 0; i < cfgAutoMax+30; i++ {
+	for i := 0; i < 130; i++ {
 		h := fmt.Sprintf("n%04d", i)
 		hosts = append(hosts, h)
 		f.pmDone[h] = true
 	}
 	col, _ := NewCollector(testCfg(), hosts, filepath.Join(t.TempDir(), "s.json"), deps)
 	col.Round(context.Background())
-	if len(cf.calls) != 1 || len(cf.calls[0]) != cfgAutoMax || cf.calls[0][0] != hosts[0] {
-		t.Fatalf("1회차 %d대", len(cf.calls[0]))
+	if len(cf.calls) != 1 || len(cf.calls[0]) != 130 || cf.calls[0][0] != hosts[0] {
+		t.Fatalf("1회차 호출 %d회", len(cf.calls))
 	}
 	col.Round(context.Background())
-	if len(cf.calls) != 2 || len(cf.calls[1]) != 30 || cf.calls[1][0] != hosts[cfgAutoMax] {
-		t.Fatalf("2회차 %v", cf.calls[1])
+	if len(cf.calls) != 1 { // 모두 조사했으니 2회차는 대상 없음
+		t.Fatalf("2회차에 또 조사함 %d회", len(cf.calls))
 	}
 }

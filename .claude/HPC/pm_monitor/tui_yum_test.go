@@ -258,7 +258,7 @@ func TestYumFooterAndHeader(t *testing.T) {
 	}
 	press(v, ySnap, "y")
 	v.prepare(ySnap, 120)
-	if foot = strings.Join(v.footerLines(120), "\n"); !strings.Contains(foot, "c r d l y 전환") || !strings.Contains(foot, "y 닫기") {
+	if foot = strings.Join(v.footerLines(120), "\n"); !strings.Contains(foot, "c r d l t y 전환") || !strings.Contains(foot, "y 닫기") {
 		t.Errorf("yum 패널 푸터: %q", foot)
 	}
 	// 백그라운드 화면에서도 q/Q 안내는 그대로 뒤에 붙는다
