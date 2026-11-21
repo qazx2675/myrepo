@@ -15,7 +15,7 @@ pm_monitor(`install_mn`) 의 파일별 역할. 표준 라이브러리만 사용,
 | `state.go` | 상태 분류·지연·완료후꺼짐·재부팅됨, 이력 JSON 저장(형식 번호 2, 옛 파일 이행, `Record.InstallDone`, `Check` 새 필드·Ver 4, `Record.Mode`·`YumKernel`·`YumBoot`·`YumSince`·`YumDoneAt`·`YumNow`), 수집 회차(`Collector`), 스냅샷(`Snapshot.Yum` 집계). yum 전이는 순수 함수 `applyYum`, yum 지연은 `yumDelayed`, 완료 후 `c` 판정은 `ApplyCompletedPing` |
 | `comment.go` | 설치현황·점검요청 코멘트 문구 생성, yum 요약 줄·목록·`r` 의 yum 블록, `y` 표(`YumTable`) |
 | `dhcp.go` | `d` 키: ping X 목록(yum 서버 제외)을 `dhcp_server` 로 보내 조회 |
-| `ldap.go` | (v0.5.0) 서버 설정 조사: 원격 명령 한 줄(`ldapCmd`, csh 안전, `bindpw` 는 읽지 않음)·출력 파싱(`parseLdapOutput`, URI 호스트 이름만 `uriHost`)·`Check` 요약, 대상 판정(`ldapTarget`: yum 은 `yum_update/접속가능`, OS 서버는 상태 무관 / `autoTarget`: ping 이 닿는 OS 서버·`yum_update/접속가능`), 회차 안 자동 첫 조사(`autoTargets`, 회차당 `cfgAutoMax`=100대), `l` 재조사(`SetChecks` — 응답 없는 서버는 이전 값 유지), 보고 문구 |
+| `ldap.go` | (v0.5.0) 서버 설정 조사: 원격 명령 한 줄(`ldapCmd`, csh 안전, `bindpw` 는 읽지 않음)·출력 파싱(`parseLdapOutput`, URI 호스트 이름만 `uriHost`)·`Check` 요약, 대상 판정(`ldapTarget`: yum 은 `yum_update/접속가능`, OS 서버는 상태 무관 / `autoTarget`: ping 이 닿는 OS 서버·`yum_update/접속가능`), 회차 안 자동 첫 조사(`autoTargets`, 회차당 대수 제한 없음(동시 실행 제한은 gossh)), `l` 재조사(`SetChecks` — 응답 없는 서버는 이전 값 유지), 보고 문구 |
 | `oklist.go` | (v0.5.0) `oklist.txt` 읽기(`parseOklist`: 탭 7칸·머리줄·`#`·경고 줄 수), 조사값과 비교(`cfgDiff`: 여섯 값, 대소문자·순서 구분), 스냅샷 비교 비트(`Cmp`)·집계(`CfgSummary`)·호스트파일 순서(`HostOrder`), **res 파일**(`resContent`, `writeRes`: 임시 파일 → 이름 변경, 같으면 안 씀, `설치/yumupdate여부` = `Record.InstallDone`, `설정동일여부`) |
 | `lpanel.go` | (v0.5.0) `l` 패널 렌더: 머리 줄(oklist·조사·다름·경고, `m` 필터 안내)·표 열·24칸 `…` 줄임·다른 칸 빨간색·`(없음)`, 보이는 줄만 그림(8000대) |
 | `render.go` | 스냅샷을 문자열로 바꾸는 순수 렌더(보이는 줄만 만듦, `l` 패널은 `lpanel.go` 에 맡김). yum 서버가 있을 때만 머리줄 `(yum M대)`·푸터 `1~9 필터`·`y yum`, 긴 라벨 `yum_update/접속가능` 폭 |
@@ -66,7 +66,7 @@ buildSnapshot ─▶ Snapshot.Counts(전체) · Snapshot.Yum(집계·지연·벤
 ```
 install_mn <호스트파일> [oklist.txt] ─ loadOklist ─▶ Oklist{행, 경고 줄 수} ─ WithOklist ─▶ Collector        (oklist 읽기 실패 = 시작 전 종료)
 수집 회차: ping·22번·gossh -pm / YumCheck ─▶ 상태 갱신(Record.InstallDone: 설치완료·yum_update/접속가능을 한 번이라도 보면 켜짐, 끄지 않음)
-        └▶ 자동 첫 조사: autoTargets(≤ cfgAutoMax=100, 조사 결과 없는 대상) ─ LdapQuery(gossh 한 번, nice 10) ─▶ Record.Check(Ver 4)
+        └▶ 자동 첫 조사: autoTargets(제한 없음, 조사 결과 없는 대상) ─ LdapQuery(gossh 한 번, nice 10) ─▶ Record.Check(Ver 4)
                실패한 서버는 결과가 비어 다음 회차에 다시 시도, 성공하면 다시 하지 않음
 `l` 키 ─▶ ldapTargets(OS 서버 전부 + yum_update/접속가능) ─ LdapQuery ─▶ SetChecks(응답 없는 서버는 이전 값 유지, 비고에 실패 이유)
 buildSnapshot ─▶ Snapshot.HostOrder · Cmp(서버별 비교 비트) · Cfg(집계) ─▶ 화면(lpanel.go: 빨간 칸, m 필터) / writeRes ─▶ <호스트파일>.res (임시 파일 → rename)

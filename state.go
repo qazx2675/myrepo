@@ -515,6 +515,8 @@ type Collector struct {
 	resLog    func(string) // 쓰기 실패를 한 번 남길 곳(데몬 로그). nil 이면 남기지 않는다
 	resMu     sync.Mutex   // res 쓰기끼리 겹치지 않게 막는다(resLast 보호)
 	resLast   []byte
+	resLastD  []byte // 완료 목록 파일(<호스트파일>.done.txt)의 지난 내용
+	resLastL  []byte // l 표 파일(<호스트파일>.ldap.txt)의 지난 내용
 	resErr    string
 	resLogged bool
 }
@@ -932,10 +934,10 @@ func (c *Collector) round1(ctx context.Context) error {
 	if err := c.save(); err != nil {
 		errs = append(errs, "state 저장: "+err.Error())
 	}
-	// 6. 설정 자동 첫 조사(계획서 4.9): 상태 갱신 뒤, 아직 결과가 없는 대상 서버를 회차마다 최대 cfgAutoMax 대씩.
+	// 6. 설정 자동 첫 조사(계획서 4.9): 상태 갱신 뒤, 아직 결과가 없는 대상 서버 전부(대수 제한 없음, 동시 실행 제한은 gossh).
 	// 실패한 서버는 결과가 비어 있으니 다음 회차에 다시 대상이 되고, 성공한 서버는 자동으로 다시 조사하지 않는다.
 	if c.deps.Cfg != nil && ctx.Err() == nil {
-		if t := c.autoTargets(cfgAutoMax); len(t) > 0 {
+		if t := c.autoTargets(); len(t) > 0 {
 			res, fails, err := c.deps.Cfg(c.cfg, t)
 			if err != nil {
 				errs = append(errs, "설정 조사: "+err.Error())

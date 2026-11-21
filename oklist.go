@@ -201,6 +201,8 @@ func (c *Collector) writeRes(s *Snapshot) {
 	}
 	c.resMu.Lock()
 	defer c.resMu.Unlock()
+	defer c.writeLdapFile(s)
+	defer c.writeDoneFile(s)
 	b := resContent(s)
 	if c.resLast != nil && bytes.Equal(b, c.resLast) {
 		return
@@ -218,4 +220,89 @@ func (c *Collector) writeRes(s *Snapshot) {
 	}
 	c.resErr = ""
 	c.resLast = b
+}
+
+// doneRows 는 완료 서버(설치/yumupdate 완료) 줄이다(호스트파일 순서): hostname, 상태, 설정동일여부.
+func doneRows(s *Snapshot) []string {
+	var out []string
+	for _, i := range s.hostOrder() {
+		r := s.Records[i]
+		if !(r.InstallDone || doneNow(r)) {
+			continue
+		}
+		same := ""
+		if m := s.cmpOf(i); m&cmpOn != 0 {
+			same = "O"
+			if m&cmpDiffMask != 0 {
+				same = "X"
+			}
+		}
+		out = append(out, oneLine(r.Name)+"\t"+r.Status.String()+"\t"+same)
+	}
+	return out
+}
+
+const doneHeader = "hostname\t상태\t설정동일여부"
+
+// doneFileContent 는 <호스트파일>.done.txt 내용이다: 머리줄 + 완료 서버 한 줄씩(탭 구분, LF).
+func doneFileContent(s *Snapshot) []byte {
+	return []byte(doneHeader + "\n" + strings.Join(append(doneRows(s), ""), "\n"))
+}
+
+// DoneList 는 t 패널 본문이다: 완료 대수 + 완료 서버 표.
+func DoneList(s Snapshot) string {
+	rows := doneRows(&s)
+	if len(rows) == 0 {
+		return "완료된 서버가 없습니다"
+	}
+	return fmt.Sprintf("완료 %d대 (<호스트파일>.done.txt 에 자동 저장)\n%s\n%s", len(rows), doneHeader, strings.Join(rows, "\n"))
+}
+
+// doneFileName 은 완료 목록 파일 경로(<호스트파일 이름>.done.txt)다.
+func doneFileName(resPath string) string {
+	return strings.TrimSuffix(resPath, ".res") + ".done.txt"
+}
+
+// writeDoneFile 은 완료 목록을 파일로 쓴다. 내용이 같으면 쓰지 않는다. 호출하는 쪽이 resMu 를 잡고 있어야 한다.
+func (c *Collector) writeDoneFile(s *Snapshot) {
+	b := doneFileContent(s)
+	if c.resLastD != nil && bytes.Equal(b, c.resLastD) {
+		return
+	}
+	err := writeFileAtomicMode(doneFileName(c.resPath), b, 0o644)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err != nil {
+		c.resErr = "완료 목록 저장 실패: " + err.Error()
+		return
+	}
+	if strings.HasPrefix(c.resErr, "완료 목록 저장 실패") {
+		c.resErr = ""
+	}
+	c.resLastD = b
+}
+
+// ldapFileName 은 l 표를 내보낼 파일 경로(<호스트파일 이름>.ldap.txt)다. res 파일과 같은 디렉터리에 둔다.
+func ldapFileName(resPath string) string {
+	return strings.TrimSuffix(resPath, ".res") + ".ldap.txt"
+}
+
+// writeLdapFile 은 l 표(화면과 같은 8칸, ldap_check결과 포함)를 탭 구분 파일로 쓴다. 내용이 같으면 쓰지 않는다.
+// 호출하는 쪽이 resMu 를 잡고 있어야 한다. 실패해도 수집은 계속한다(resErr 에 이유만 남긴다).
+func (c *Collector) writeLdapFile(s *Snapshot) {
+	b := []byte(ldapTable(s) + "\n")
+	if c.resLastL != nil && bytes.Equal(b, c.resLastL) {
+		return
+	}
+	err := writeFileAtomicMode(ldapFileName(c.resPath), b, 0o644)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err != nil {
+		c.resErr = "l 표 저장 실패: " + err.Error()
+		return
+	}
+	if strings.HasPrefix(c.resErr, "l 표 저장 실패") {
+		c.resErr = ""
+	}
+	c.resLastL = b
 }

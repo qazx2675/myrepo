@@ -126,6 +126,7 @@ const (
 	panelDelay   = 'r'
 	panelDHCP    = 'd'
 	panelLDAP    = 'l'
+	panelDone    = 't' // 완료 목록(설치/yumupdate 완료 서버). 스냅샷만 쓴다. <호스트파일>.done.txt 로도 저장한다
 	panelYum     = 'y' // yum update 모드의 커널 표(계획서 4.8). 스냅샷만 쓰므로 조회·ssh 가 없다
 )
 
@@ -200,6 +201,8 @@ func panelTitle(kind rune) string {
 		return "DHCP"
 	case panelLDAP:
 		return "LDAP·설정"
+	case panelDone:
+		return "완료 목록"
 	case panelYum:
 		return "yum 커널"
 	}
@@ -207,6 +210,9 @@ func panelTitle(kind rune) string {
 }
 
 func (v *ViewState) panelBody(snap Snapshot) string {
+	if v.Panel == panelDone {
+		return DoneList(snap)
+	}
 	if v.Panel == panelYum { // 스냅샷만으로 만든다: 포그라운드 수집기·데몬 화면에서 똑같다
 		return YumTable(snap, v.Now)
 	}
@@ -421,21 +427,25 @@ func (v *ViewState) footerLines(w int) []string {
 	case v.Searching:
 		items = []string{"Enter 적용", "Esc 취소", "Backspace 지움"}
 	case v.Panel != 0:
-		sw := "c r d l 전환"
+		sw := "c r d l t 전환"
 		if v.hasYum {
-			sw = "c r d l y 전환"
+			sw = "c r d l t y 전환"
 		}
 		items = []string{"↑↓ PgUp PgDn Home End 스크롤", fmt.Sprintf("%c 닫기", v.Panel), sw, "q 뒤로"}
-		if v.Panel == panelLDAP && v.hasOK { // oklist 가 있을 때만 m 을 안내한다
-			items = append(items[:3:3], "m 다른 서버만", "q 뒤로")
+		if v.Panel == panelLDAP { // u 는 열린 채로 다시 조사, m 은 oklist 가 있을 때만 안내한다
+			items = append(items[:3:3], "u 다시 조사")
+			if v.hasOK {
+				items = append(items, "m 다른 서버만")
+			}
+			items = append(items, "q 뒤로")
 		}
 	default:
 		if v.hasYum { // yum 서버가 있을 때만 8·9 필터와 y 키를 안내한다(OS 서버만이면 v0.3.0 푸터 그대로)
 			items = []string{"↑↓ PgUp PgDn Home End 이동", "/ 검색", "1~9 필터", "0 해제",
-				"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "y yum", "q 종료"}
+				"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "t 완료목록", "y yum", "q 종료"}
 		} else {
 			items = []string{"↑↓ PgUp PgDn Home End 이동", "/ 검색", "1~7 필터", "0 해제",
-				"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "q 종료"}
+				"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "t 완료목록", "q 종료"}
 		}
 		if v.Detach {
 			items[len(items)-1] = "q 나가기(수집 계속)"
