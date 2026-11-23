@@ -21,7 +21,7 @@ t() { printf '%s\n' "$*" | ssh -o BatchMode=yes "root@${TH:-$TGT}" bash 2>/dev/n
 
 # 대상 초기화: DCGM 패키지·가짜 GPU 상태 지움, rhel.repo(enabled=0, 원래 baseurl), 자동 마운트 켬
 reset_target() {
-    t 'rpm -qa "datacenter-gpu-manager-4-*" | xargs -r rpm -e --nodeps >/dev/null 2>&1
+    t 'rpm -qa "datacenter-gpu-manager-4-*" fake-dcgm-dep | xargs -r rpm -e --nodeps >/dev/null 2>&1
        systemctl reset-failed nvidia-dcgm >/dev/null 2>&1
        rm -rf /var/lib/fakegpu/* /tmp/gpu_install /var/log/nvidia-installer.log
        echo 1 > /var/lib/fakegpu/gpus

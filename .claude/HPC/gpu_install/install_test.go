@@ -18,10 +18,11 @@ type fakeHost struct {
 	nouveauRC int
 	scpErr    error
 	driver    string
-	cuda      string // nvidia-smi CUDA (비우면 12.4)
-	dcgmRC    int    // DCGM 설치 스크립트 종료코드
-	dcgmOut   string // DCGM 설치 스크립트 출력 (비우면 repo 복구 표식만)
-	startOut  string // nvidia-dcgm 기동·확인 출력 (비우면 정상 상태)
+	cuda      string   // nvidia-smi CUDA (비우면 12.4)
+	dcgmRC    int      // DCGM 설치 스크립트 종료코드
+	dcgmOut   string   // DCGM 설치 스크립트 출력 (비우면 repo 복구 표식만)
+	startOut  string   // nvidia-dcgm 기동·확인 출력 (비우면 정상 상태)
+	depOut    []string // rpm -U --test 출력, 호출마다 하나씩 (다 쓰면 부족분 없음)
 }
 
 // goodDcgm 은 major 기준 정상인 dcgmStateScript 출력이다.
@@ -45,6 +46,13 @@ func (f *fakeHost) use(t *testing.T) {
 				return f.startOut, 0, nil
 			}
 			return goodDcgm(cudaMajor(f.cudaVer())), 0, nil
+		case strings.HasPrefix(script, "LC_ALL=C rpm -U --test"):
+			if len(f.depOut) == 0 {
+				return "", 0, nil
+			}
+			out := f.depOut[0]
+			f.depOut = f.depOut[1:]
+			return out, 1, nil
 		case strings.Contains(script, "dnf install") || strings.Contains(script, "dnf localinstall"):
 			if f.dcgmOut != "" {
 				return f.dcgmOut, f.dcgmRC, nil
@@ -54,7 +62,7 @@ func (f *fakeHost) use(t *testing.T) {
 			rc := f.installRC[0]
 			f.installRC = f.installRC[1:]
 			return "installer out", rc, nil
-		case strings.HasPrefix(script, "rmmod nouveau"):
+		case strings.Contains(script, "rmmod nouveau"):
 			return "", f.nouveauRC, nil
 		case strings.Contains(script, "lsof"):
 			return "--- lsof /dev/nvidia*\nnv-hostengine 123 root", 0, nil
@@ -83,10 +91,12 @@ func (f *fakeHost) kinds() []string {
 		switch {
 		case strings.HasPrefix(s, "sh "):
 			k = append(k, s)
-		case strings.HasPrefix(s, "rmmod nouveau"):
+		case strings.Contains(s, "rmmod nouveau"):
 			k = append(k, "nouveau")
 		case strings.HasPrefix(s, "mkdir"):
 			k = append(k, "mkdir")
+		case strings.HasPrefix(s, "LC_ALL=C rpm -U --test"):
+			k = append(k, "rpm-test")
 		case strings.HasPrefix(s, "rm -f"):
 			k = append(k, s)
 		case s == unloadScript:
@@ -232,8 +242,17 @@ func TestInstallWarnAndMismatch(t *testing.T) {
 func TestParseRemote(t *testing.T) {
 	so := "gpu01: a\ngpu02: x\ngpu01: ERROR: b\ngpu01: GI_RC=3\n"
 	out, rc, err := parseRemote(so, "", "gpu01")
-	if out != "a\nb" || rc != 3 || err != nil {
+	if out != "a\nERROR: b" || rc != 3 || err != nil {
 		t.Errorf("%q %d %v", out, rc, err)
+	}
+	// 본문의 ERROR 줄은 남고, gossh 의 "ERROR: 종료코드 N" 줄은 판정·본문에 쓰지 않는다
+	so = "gpu01: ERROR: An NVIDIA kernel module 'nvidia' appears to already be loaded\ngpu01: GI_RC=0\ngpu01: ERROR: 종료코드 3\n"
+	out, rc, err = parseRemote(so, "", "gpu01")
+	if out != "ERROR: An NVIDIA kernel module 'nvidia' appears to already be loaded" || rc != 0 || err != nil {
+		t.Errorf("%q %d %v", out, rc, err)
+	}
+	if _, rc, err = parseRemote("gpu01: ERROR: 종료코드 3\n", "", "gpu01"); rc != -1 || err == nil {
+		t.Errorf("%d %v", rc, err)
 	}
 	_, rc, err = parseRemote("", "gpu01: ERROR: SSH 접속 실패\n", "gpu01")
 	if rc != -1 || err == nil || !strings.Contains(err.Error(), "SSH 접속 실패") {

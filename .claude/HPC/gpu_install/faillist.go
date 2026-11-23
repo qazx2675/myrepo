@@ -43,9 +43,11 @@ func formatRetryList(fs []*Target) string {
 }
 
 // WriteFailLists 는 실패한 호스트가 있으면 fail_list·fail_list.retry 를 쓰고 화면에도 출력한다.
-// 실패가 없으면 아무것도 쓰지 않는다.
+// 실패가 없으면 이전 실행이 남긴 두 파일을 지운다.
 func WriteFailLists(out io.Writer, fs []*Target) error {
 	if len(fs) == 0 {
+		os.Remove(failListFile)
+		os.Remove(retryListFile)
 		return nil
 	}
 	if err := os.WriteFile(failListFile, []byte(formatFailList(fs)), 0o644); err != nil {

@@ -13,8 +13,16 @@ fake DCGM 4 for gpu_install test (not a real NVIDIA package)
 
 %package core
 Summary: fake DCGM core (nvidia-dcgm.service, dcgmi)
+# 의존성 자동 전송 시험용: 대상에 없는 가짜 패키지(fake-dcgm-dep)가 제공하는 capability 를 요구한다
+Requires: fake-dcgm-dep-cap
 %description core
 fake DCGM core
+
+%package -n fake-dcgm-dep
+Summary: fake DCGM dependency (gpu_install 의존성 전송 시험용)
+Provides: fake-dcgm-dep-cap = 1.0
+%description -n fake-dcgm-dep
+fake dependency of DCGM core
 
 %package proprietary
 Summary: fake DCGM proprietary
@@ -74,6 +82,7 @@ ExecStart=/bin/sleep infinity
 [Install]
 WantedBy=multi-user.target
 EOF
+echo dep > %{buildroot}/usr/share/fake-dcgm/dep
 for p in core proprietary cuda12 cuda13 proprietary-cuda12 proprietary-cuda13; do
     echo "$p" > %{buildroot}/usr/share/fake-dcgm/$p
 done
@@ -95,6 +104,9 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 /usr/bin/dcgmi
 /usr/lib/systemd/system/nvidia-dcgm.service
 /usr/share/fake-dcgm/core
+
+%files -n fake-dcgm-dep
+/usr/share/fake-dcgm/dep
 
 %files proprietary
 /usr/share/fake-dcgm/proprietary

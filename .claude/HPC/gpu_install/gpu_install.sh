@@ -26,6 +26,7 @@ while [ $# -gt 0 ]; do
         -p)
             if [ $# -lt 2 ]; then echo "-p 옵션에 값이 필요합니다" >&2; exit 2; fi
             OPTS+=("-p" "$2"); shift 2 ;;
+        -?*) usage; echo "알 수 없는 옵션: $1" >&2; exit 2 ;;
         *) POS+=("$1"); shift ;;
     esac
 done
@@ -51,6 +52,7 @@ fi
 
 ARGS=("$AUTOFS")
 [ -n "$LIST" ] && ARGS+=("$LIST")
+ARGS+=("${POS[@]:2}")   # 남는 위치 인자는 Go 가 오류로 처리한다
 ARGS+=("${OPTS[@]}")
 [ -n "$MOUNT_USER" ] && ARGS+=("-mount-user" "$MOUNT_USER")
 [ -n "$GOSSH" ] && ARGS+=("-gossh" "$GOSSH")

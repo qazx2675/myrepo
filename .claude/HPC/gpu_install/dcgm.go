@@ -64,7 +64,7 @@ rpm -qa --qf '%{NAME} %{VERSION}\n' 'datacenter-gpu-manager-4-*' 2>/dev/null | s
 const dcgmStartScript = `systemctl enable nvidia-dcgm
 systemctl restart nvidia-dcgm
 for i in 1 2 3 4 5 6 7 8 9 10; do
-  timeout 30 dcgmi discovery -l 2>/dev/null | grep -qE '(^|[^0-9])[1-9][0-9]* GPUs? found' && break
+  timeout 30 dcgmi discovery -l 2>/dev/null | grep -qiE '(^|[^0-9])[1-9][0-9]* GPUs? found' && break
   sleep 3
 done
 timeout 30 dcgmi discovery -l 2>&1
@@ -172,7 +172,7 @@ func (d *DcgmState) state() string {
 // dcgmRemoveSnippet 은 반대 CUDA 의 DCGM 패키지가 있으면 서비스를 멈추고 저장소 없이 제거한다.
 func dcgmRemoveSnippet(major int) string {
 	return `rm_pkgs=""
-for p in ` + strings.Join(dcgmOpposite(major), " ") + `; do
+for p in ` + strings.Join(dcgmOpposite(major), " ") + ` datacenter-gpu-manager; do
   rpm -q "$p" >/dev/null 2>&1 && rm_pkgs="$rm_pkgs $p"
 done
 if [ -n "$rm_pkgs" ]; then
@@ -212,7 +212,7 @@ if grep -Eq '^[[:space:]]*enabled[[:space:]]*=[[:space:]]*0' "$repo"; then echo 
 ids=$(sed -n 's/^[[:space:]]*\[\([^]]*\)\].*/\1/p' "$repo" | paste -sd, -)
 echo "GI_REPO_IDS=$ids"
 if [ -z "$ids" ]; then echo "GI_FAIL=dcgm no repo id in rhel.repo"; exit 1; fi
-dnf install -y --disablerepo='*' --enablerepo="$ids" ` + strings.Join(dcgmPackages(major), " ") + ` || { echo "GI_FAIL=dcgm install failed"; exit 1; }
+dnf install -y --setopt=skip_if_unavailable=True --disablerepo='*' --enablerepo="$ids" ` + strings.Join(dcgmPackages(major), " ") + ` || { echo "GI_FAIL=dcgm install failed"; exit 1; }
 )`
 }
 
@@ -261,7 +261,7 @@ func rpmNameVer(file, name string) (string, bool) {
 		return "", false
 	}
 	i := strings.LastIndexByte(rest, '.')
-	if i < 0 {
+	if i < 0 || (rest[i+1:] != "x86_64" && rest[i+1:] != "noarch") { // 대상은 x86_64 서버
 		return "", false
 	}
 	return rest[:i], true
@@ -390,7 +390,49 @@ func dcgmMount(cfg *Config, t *Target, l *hostLog, major int, restoreFail *bool)
 	return true
 }
 
-// dcgmScp 는 관리 서버에서 최신 DCGM rpm 을 찾아 보내고 localinstall 한 뒤 지운다.
+// dcgmSendDeps 는 보낸 rpm 으로 rpm -U --test 를 해 부족한 의존성이 없어질 때까지,
+// 관리 서버 repodata 에서 제공 rpm 을 찾아 send 로 보낸다(최대 maxDepRounds 번).
+// 실패하면 t.Fail 에 "dcgm no repodata" 또는 "dcgm dep not found(...)" 를 남긴다.
+func dcgmSendDeps(cfg *Config, t *Target, l *hostLog, send func(string) bool, remote *[]string, sent map[string]bool) bool {
+	var idx repoIndex
+	for round := 0; ; round++ {
+		out, rc := l.run(cfg, "의존성 확인(rpm -U --test)", rpmTestScript(*remote), shortTimeout)
+		if rc < 0 {
+			t.Fail = "dcgm rpm test failed"
+			l.say("fail: %s", t.Fail)
+			return false
+		}
+		caps := parseMissingDeps(out)
+		if len(caps) == 0 {
+			return true
+		}
+		if idx == nil {
+			var err error
+			if idx, err = LoadRepoIndex(t.Status.BaseURLs); err != nil {
+				t.Fail = err.Error()
+				l.say("fail: %s (rhel.repo baseurl: %s)", t.Fail, dash(strings.Join(t.Status.BaseURLs, " ")))
+				return false
+			}
+		}
+		deps, missing := idx.resolveDeps(caps, sent)
+		if len(missing) == 0 && round >= maxDepRounds {
+			missing = caps
+		}
+		if len(missing) > 0 {
+			t.Fail = "dcgm dep not found(" + strings.Join(missing, ",") + ")"
+			l.say("fail: %s", t.Fail)
+			return false
+		}
+		l.say("부족한 의존성 %s → rpm %d개 전송", strings.Join(caps, ","), len(deps))
+		for _, f := range deps {
+			if !send(f) {
+				return false
+			}
+		}
+	}
+}
+
+// dcgmScp 는 관리 서버에서 최신 DCGM rpm 을 찾아 보내고 부족한 의존성 rpm 도 보낸 뒤 localinstall 하고 지운다.
 func dcgmScp(cfg *Config, t *Target, l *hostLog, major int) bool {
 	files, err := FindDcgmRPMs(t.Status.BaseURLs, dcgmPackages(major))
 	if err != nil {
@@ -404,6 +446,7 @@ func dcgmScp(cfg *Config, t *Target, l *hostLog, major int) bool {
 		return false
 	}
 	var remote []string
+	sent := map[string]bool{} // 보낸 관리 서버 rpm 경로
 	defer func() {
 		if len(remote) > 0 {
 			var q []string
@@ -413,8 +456,7 @@ func dcgmScp(cfg *Config, t *Target, l *hostLog, major int) bool {
 			l.run(cfg, "DCGM rpm 삭제", "rm -f "+strings.Join(q, " "), shortTimeout)
 		}
 	}()
-	for _, f := range files {
-		r := path.Join(remoteTmp, filepath.Base(f))
+	send := func(f string) bool {
 		l.say("scp: %s → %s/", f, remoteTmp)
 		if err := copyFile(f, t.Host, remoteTmp, shortTimeout); err != nil {
 			l.write("scp 오류: " + err.Error() + "\n")
@@ -422,7 +464,17 @@ func dcgmScp(cfg *Config, t *Target, l *hostLog, major int) bool {
 			l.say("fail: DCGM rpm scp 실패 (%v)", err)
 			return false
 		}
-		remote = append(remote, r)
+		sent[f] = true
+		remote = append(remote, path.Join(remoteTmp, filepath.Base(f)))
+		return true
+	}
+	for _, f := range files {
+		if !send(f) {
+			return false
+		}
+	}
+	if !dcgmSendDeps(cfg, t, l, send, &remote, sent) {
+		return false
 	}
 	out, rc := l.run(cfg, "DCGM 설치(localinstall)", dcgmScpScript(remote, major), installTimeout)
 	if rc != 0 {

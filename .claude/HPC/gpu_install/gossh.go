@@ -44,14 +44,15 @@ func runGossh(cfg *Config, hosts []string, cmd string, timeout time.Duration) (s
 	c.WaitDelay = 5 * time.Second
 	err = c.Run()
 	var ee *exec.ExitError
-	if errors.As(err, &ee) && (so.Len() > 0 || se.Len() > 0) {
+	if errors.As(err, &ee) && ctx.Err() == nil && (so.Len() > 0 || se.Len() > 0) {
 		err = nil
 	}
 	return so.String(), se.String(), err
 }
 
 // splitHostLine 은 "host: 내용" 줄을 나눈다. 형식이 아니면 ok=false.
-// gossh 가 종료코드 != 0 일 때 붙이는 "ERROR: " 접두사는 떼지 않는다(호출하는 쪽에서 판단).
+// gossh 는 원격 종료코드 != 0 이면 별도 줄 "host: ERROR: 종료코드 N" 을 덧붙인다.
+// "ERROR: " 접두사는 떼지 않고 그대로 돌려준다(호출하는 쪽에서 판단).
 func splitHostLine(line string) (host, val string, ok bool) {
 	line = strings.TrimRight(line, "\r")
 	i := strings.Index(line, ": ")

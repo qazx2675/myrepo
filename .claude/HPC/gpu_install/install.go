@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -99,15 +100,19 @@ func (l *hostLog) run(cfg *Config, title, script string, timeout time.Duration) 
 }
 
 // runOnHost 는 bash 스크립트를 호스트 하나에서 gossh 로 실행한다. stderr 는 stdout 에 합치고
-// 마지막에 종료코드 표식을 찍어 읽는다.
+// 마지막에 종료코드 표식을 찍어 읽는다. 래퍼는 표식 뒤 항상 exit 0 으로 끝나 gossh 가
+// "ERROR: 종료코드 N" 줄을 만들지 않게 하고, 판정은 오직 표식으로 한다.
 func runOnHost(cfg *Config, host, script string, timeout time.Duration) (string, int, error) {
-	full := "{\n" + script + "\n} 2>&1\necho \"" + mkRC + "$?\"\n"
+	full := "{\n" + script + "\n} 2>&1\necho \"" + mkRC + "$?\"\nexit 0\n"
 	so, se, err := runGossh(cfg, []string{host}, remoteBash(full), timeout)
 	if err != nil {
 		return "", -1, err
 	}
 	return parseRemote(so, se, host)
 }
+
+// gosshExitLine 은 gossh 가 원격 종료코드 != 0 일 때 덧붙이는 줄이다.
+var gosshExitLine = regexp.MustCompile(`^ERROR: 종료코드 \d+$`)
 
 // parseRemote 는 gossh -script 출력에서 host 의 줄만 모으고 종료코드 표식을 읽는다.
 func parseRemote(stdout, stderr, host string) (string, int, error) {
@@ -118,7 +123,9 @@ func parseRemote(stdout, stderr, host string) (string, int, error) {
 		if !ok || h != host {
 			continue
 		}
-		v = strings.TrimPrefix(v, "ERROR: ")
+		if gosshExitLine.MatchString(v) {
+			continue // gossh 가 덧붙인 종료코드 줄은 본문·판정에 쓰지 않는다
+		}
 		if strings.HasPrefix(v, mkRC) {
 			if n, err := strconv.Atoi(strings.TrimPrefix(v, mkRC)); err == nil {
 				rc = n
@@ -177,7 +184,7 @@ func precheck(cfg *Config, t *Target, l *hostLog) bool {
 	}
 	if st.Nouveau {
 		l.say("nouveau 가 로드되어 있어 언로드합니다")
-		if _, rc := l.run(cfg, "nouveau 언로드", "rmmod nouveau && ! lsmod | grep -q '^nouveau '", shortTimeout); rc != 0 {
+		if _, rc := l.run(cfg, "nouveau 언로드", "for v in /sys/class/vtconsole/vtcon*; do grep -qi frame \"$v/name\" 2>/dev/null && echo 0 > \"$v/bind\"; done; rmmod nouveau && ! lsmod | grep -q '^nouveau '", shortTimeout); rc != 0 {
 			t.Fail = "nouveau unload failed"
 			l.say("fail: nouveau 언로드 실패")
 			return false
@@ -191,14 +198,16 @@ func precheck(cfg *Config, t *Target, l *hostLog) bool {
 const unloadScript = `for s in nvidia-dcgm nvidia-persistenced nvidia-fabricmanager; do
   systemctl stop "$s" 2>/dev/null
 done
-for m in nvidia_drm nvidia_modeset nvidia_uvm nvidia nouveau; do
+for m in nvidia_peermem nv_peer_mem nvidia_fs gdrdrv nvidia_vgpu_vfio nvidia_drm nvidia_modeset nvidia_uvm nvidia nouveau; do
   if lsmod | grep -q "^$m "; then rmmod "$m"; fi
 done
 lsmod | grep -E '^(nvidia|nouveau)' || true`
 
 // diagScript 는 재시도도 실패했을 때 남길 점유 프로세스와 설치 로그 끝부분이다.
 const diagScript = `echo '--- lsof /dev/nvidia*'
-timeout 60 lsof /dev/nvidia* 2>&1
+shopt -s nullglob
+set -- /dev/nvidia* /dev/nvidia-caps/*
+if [ $# -gt 0 ]; then timeout 60 lsof -b -nP "$@" 2>&1; fi
 echo '--- tail -n 50 /var/log/nvidia-installer.log'
 tail -n 50 /var/log/nvidia-installer.log 2>&1
 true`

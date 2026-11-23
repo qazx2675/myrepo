@@ -71,7 +71,7 @@ gpu02 570.172.08      # 이 호스트는 이 버전으로 설치
    - mount 서버: 대상의 `/etc/yum.repos.d/rhel.repo` 에서 `enabled=0` 을 `enabled=1` 로 바꾸고 `dnf install` 을 실행한다. 끝나면 **원래 값(0)으로 복구**한다.
      - 복구는 대상 쪽 스크립트의 `trap` 으로 처리해서, 성공·실패·중단 어느 경우에도 0으로 돌아가게 한다.
      - repo가 켜지지 않아 설치가 실패하는 일은 없어야 한다. 설치 직전에 enabled=1 이 실제로 적용됐는지 다시 확인한다.
-   - scp 서버: 대상 rhel.repo 의 `baseurl`(file:// 경로)을 읽는다. **관리 서버의 같은 경로**에서 필요한 DCGM rpm(최신 버전)을 찾아 `/tmp/gpu_install/` 로 scp한다.
+   - scp 서버: 대상 rhel.repo 의 `baseurl`(file:// 경로)을 읽는다. **관리 서버의 같은 경로**에서 필요한 DCGM rpm(최신 버전)을 찾아 `/tmp/gpu_install/` 로 scp한다. 4종을 보낸 뒤 대상에서 `rpm -U --test` 로 부족한 의존성(capability)을 얻고, 같은 경로의 repodata(`primary.xml.gz`)에서 제공 rpm(x86_64/noarch 중 최신)을 찾아 추가 scp, 부족분이 없어질 때까지 반복(최대 10회)한다. 실패 사유: repodata 없음 `dcgm no repodata`, 제공 rpm 없음 `dcgm dep not found(cap,...)`.
      이어서 `dnf localinstall -y --disablerepo='*'` 로 설치하고 rpm 파일을 지운다.
 9. **서비스 기동과 판정**: `systemctl enable nvidia-dcgm` → `systemctl restart nvidia-dcgm` 을 실행한다.
    `is-active`, `is-enabled`, `dcgmi discovery -l` 이 모두 정상이고 GPU가 1개 이상 보여야 **DCGM 정상**으로 판정한다.

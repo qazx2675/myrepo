@@ -49,9 +49,15 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   echo "GI_DRIVER=$(timeout 30 nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -n 1)"
   echo "GI_CUDA=$(timeout 30 nvidia-smi 2>/dev/null | sed -n 's/.*CUDA[ A-Za-z]*Version: *\([0-9][0-9.]*\).*/\1/p' | head -n 1)"
 fi
-nv=$(lspci 2>/dev/null | grep -i nvidia)
-echo "GI_GPU=$(printf '%s\n' "$nv" | grep -ciE 'vga|3d controller')"
-if printf '%s\n' "$nv" | grep -qiE 'nvswitch|bridge' || ls /dev/nvidia-nvswitch* >/dev/null 2>&1; then echo GI_NVSWITCH=1; fi
+if command -v lspci >/dev/null 2>&1; then
+  nv=$(lspci 2>/dev/null | grep -i nvidia)
+  echo "GI_GPU=$(printf '%s\n' "$nv" | grep -ciE 'vga|3d controller')"
+else
+  # lspci(pciutils) 가 없으면 sysfs 에서 NVIDIA(0x10de) 디스플레이 장치(class 0x03)를 센다
+  nv=""
+  echo "GI_GPU=$(grep -l 0x10de /sys/bus/pci/devices/*/vendor 2>/dev/null | while read f; do grep -q '^0x03' "${f%/vendor}/class" && echo x; done | wc -l)"
+fi
+if printf '%s\n' "$nv" | grep -qiE 'nvswitch|^[^ ]+ bridge: nvidia' || ls /dev/nvidia-nvswitch* >/dev/null 2>&1; then echo GI_NVSWITCH=1; fi
 rpm -q "kernel-devel-$(uname -r)" >/dev/null 2>&1 && echo GI_KDEVEL=1
 command -v gcc >/dev/null 2>&1 && echo GI_GCC=1
 lsmod 2>/dev/null | grep -q '^nouveau ' && echo GI_NOUVEAU=1

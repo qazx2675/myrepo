@@ -197,7 +197,7 @@ func TestDcgmMountScriptRun(t *testing.T) {
 		inLog  []string
 		output string
 	}{
-		{"성공", nil, false, 0, []string{"dnf install -y --disablerepo=* --enablerepo=baseos,dcgm datacenter-gpu-manager-4-core", "during: enabled=1", "during: enabled = 1"}, "GI_REPO_RESTORED=1"},
+		{"성공", nil, false, 0, []string{"dnf install -y --setopt=skip_if_unavailable=True --disablerepo=* --enablerepo=baseos,dcgm datacenter-gpu-manager-4-core", "during: enabled=1", "during: enabled = 1"}, "GI_REPO_RESTORED=1"},
 		{"dnf 실패", []string{"DNF_RC=1"}, false, 1, []string{"dnf install"}, "GI_FAIL=dcgm install failed"},
 		{"중단(TERM)", []string{"DNF_KILL=1"}, false, 130, []string{"dnf install"}, "GI_REPO_RESTORED=1"},
 		{"반대 cuda 제거", []string{"RPM_HAS=datacenter-gpu-manager-4-cuda12 datacenter-gpu-manager-4-proprietary-cuda12"}, false, 0,
@@ -264,8 +264,8 @@ func TestInstallDcgmScp(t *testing.T) {
 		t.Fatalf("%+v", tg)
 	}
 	k := f.kinds()
-	tail := k[len(k)-4:]
-	if tail[0] != "mkdir" || tail[1] != "dcgm-scp" || !strings.HasPrefix(tail[2], "rm -f '/tmp/gpu_install/datacenter-gpu-manager-4-core-4.10.0-1") || tail[3] != "dcgm-start" {
+	tail := k[len(k)-5:]
+	if tail[0] != "mkdir" || tail[1] != "rpm-test" || tail[2] != "dcgm-scp" || !strings.HasPrefix(tail[3], "rm -f '/tmp/gpu_install/datacenter-gpu-manager-4-core-4.10.0-1") || tail[4] != "dcgm-start" {
 		t.Errorf("%q", k)
 	}
 	if len(f.copied) != 5 || !strings.Contains(f.copied[4], "datacenter-gpu-manager-4-proprietary-cuda13-4.10.0-1.x86_64.rpm gpu01:/tmp/gpu_install") {
@@ -386,5 +386,14 @@ func TestParseSurveyDcgm(t *testing.T) {
 	}
 	if !strings.Contains(buildSurveyScript("/a", "", nil), "GI_DCGM_ACTIVE") {
 		t.Error("현황 스크립트에 DCGM 상태 없음")
+	}
+}
+
+func TestRpmNameVerArch(t *testing.T) {
+	if _, ok := rpmNameVer("datacenter-gpu-manager-4-core-4.10.0-1.aarch64.rpm", "datacenter-gpu-manager-4-core"); ok {
+		t.Fatal("aarch64 rpm 이 골라짐")
+	}
+	if v, ok := rpmNameVer("datacenter-gpu-manager-4-core-4.10.0-1.noarch.rpm", "datacenter-gpu-manager-4-core"); !ok || v != "4.10.0-1" {
+		t.Fatalf("noarch: %q %v", v, ok)
 	}
 }

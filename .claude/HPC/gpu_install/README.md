@@ -96,7 +96,7 @@ root 로 `timeout 10 ls /user/<MOUNT_USER>` 가 성공하고 `<autofs경로>/<ru
 | | mount | scp |
 |---|---|---|
 | 드라이버 | 대상에서 `sh <autofs경로>/<run> -s` | 관리 서버가 `.run` 을 대상 `/tmp/gpu_install/` 로 scp → 실행 → 파일 삭제 |
-| DCGM | 대상 `/etc/yum.repos.d/rhel.repo` 의 `enabled=0` 을 `1` 로 바꾸고 `dnf install`, 끝나면 **0 으로 복구** | 대상 rhel.repo 의 `baseurl`(`file://`) 경로를 읽고, **관리 서버의 같은 경로**에서 필요한 rpm(최신)을 `/tmp/gpu_install/` 로 scp → `dnf localinstall -y --disablerepo='*'` → rpm 삭제 |
+| DCGM | 대상 `/etc/yum.repos.d/rhel.repo` 의 `enabled=0` 을 `1` 로 바꾸고 `dnf install`, 끝나면 **0 으로 복구** | 대상 rhel.repo 의 `baseurl`(`file://`) 경로를 읽고, **관리 서버의 같은 경로**에서 필요한 rpm(최신)을 `/tmp/gpu_install/` 로 scp → `rpm -U --test` 로 부족한 의존성을 찾아 같은 경로 repodata 의 제공 rpm 도 자동 scp(부족분이 없을 때까지 최대 10회; 실패 사유 `dcgm no repodata`, `dcgm dep not found(cap,...)`) → `dnf localinstall -y --disablerepo='*'` → 보낸 rpm 모두 삭제 |
 
 - mount 의 repo 복구는 대상 쪽 스크립트의 `trap` 이 처리하므로 성공·실패·중단 어느 경우에도 0 으로 돌아갑니다.
 - scp 방식에서 baseurl 이 `file://` 이 아니거나 관리 서버에 같은 경로가 없으면 오류 메시지를 남기고 fail 입니다.
@@ -113,7 +113,7 @@ root 로 `timeout 10 ls /user/<MOUNT_USER>` 가 성공하고 `<autofs경로>/<ru
 - 최종 표: `HOST | 방식 | 이전→설치버전 | CUDA | DCGM | dcgm상태 | 결과`
 - `fail_list`: `hostname 요청버전 사유` (예: `gpu01 550.163.01 module busy(retry failed)`)
 - `fail_list.retry`: `hostname 버전` 형식이라 그대로 list 로 다시 쓸 수 있습니다 (`bash gpu_install.sh <경로> fail_list.retry`).
-- 실패가 없으면 두 파일을 만들지 않고, 실패가 있으면 화면에도 출력하고 종료코드는 1 입니다.
+- 실패가 없으면 두 파일을 만들지 않고(이전 실행이 남긴 파일은 지움), 실패가 있으면 화면에도 출력하고 종료코드는 1 입니다.
 - 호스트별 원격 출력 전체: `logs/<날짜시각>/<host>.log`
 
 `logs/`, `fail_list`, `fail_list.retry`, `list` 는 `.gitignore` 대상입니다.
