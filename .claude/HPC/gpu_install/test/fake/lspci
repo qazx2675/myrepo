@@ -1,0 +1,12 @@
+#!/bin/bash
+# 가짜 lspci: 진짜 lspci 출력 뒤에 NVIDIA 3D controller 줄을 붙인다(/var/lib/fakegpu/nogpu 가 있으면 안 붙임).
+S=/var/lib/fakegpu
+/usr/bin/lspci "$@"
+rc=$?
+if [ ! -e $S/nogpu ]; then
+    n=$(cat $S/gpus 2>/dev/null || echo 1)
+    for i in $(seq 0 $((n - 1))); do
+        printf '%02x:00.0 3D controller: NVIDIA Corporation GA100 [A100 PCIe 80GB] (rev a1)\n' $((0x3b + i))
+    done
+fi
+exit $rc

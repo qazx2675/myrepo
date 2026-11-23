@@ -1,0 +1,26 @@
+#!/bin/bash
+# 가짜 nvidia-smi (gpu_install 테스트 VM 전용). 상태는 /var/lib/fakegpu 에 있다.
+#   version/cuda : 설치된 드라이버·CUDA 버전 (가짜 .run 이 기록)
+#   modules      : '로드된' nvidia 모듈 목록 (nvidia 가 없으면 드라이버와 통신 실패)
+#   gpus         : GPU 수 (기본 1), nogpu 가 있으면 GPU 없음
+S=/var/lib/fakegpu
+ver=$(cat $S/version 2>/dev/null)
+cuda=$(cat $S/cuda 2>/dev/null)
+if [ -z "$ver" ] || [ -e $S/nogpu ] || ! grep -qx nvidia $S/modules 2>/dev/null; then
+    echo "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver. Make sure that the latest NVIDIA driver is installed and running."
+    exit 9
+fi
+n=$(cat $S/gpus 2>/dev/null || echo 1)
+case "$*" in
+    *--query-gpu=driver_version*)
+        for i in $(seq "$n"); do echo "$ver"; done
+        exit 0 ;;
+esac
+echo "$(date)"
+echo "+-----------------------------------------------------------------------------------------+"
+echo "| NVIDIA-SMI $ver             Driver Version: $ver     CUDA Version: $cuda     |"
+echo "|-----------------------------------------+------------------------+----------------------+"
+for i in $(seq 0 $((n - 1))); do
+    echo "|   $i  NVIDIA A100 80GB PCIe (fake)        Off |   00000000:3B:00.0 Off |                    0 |"
+done
+echo "+-----------------------------------------------------------------------------------------+"

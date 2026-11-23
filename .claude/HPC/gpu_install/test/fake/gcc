@@ -1,0 +1,4 @@
+#!/bin/bash
+# 가짜 gcc: 사전점검(command -v gcc) 통과용. 테스트 VM 에 gcc 가 없을 때만 설치한다. 컴파일은 하지 않는다.
+echo "gcc (fake for gpu_install test) 0.0"
+exit 0

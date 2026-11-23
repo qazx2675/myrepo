@@ -1,0 +1,11 @@
+#!/bin/bash
+# 가짜 lsmod: 진짜 lsmod 출력 뒤에 가짜 nvidia 모듈(/var/lib/fakegpu/modules)과 nouveau(플래그 파일)를 붙인다.
+S=/var/lib/fakegpu
+/usr/sbin/lsmod "$@" || exit
+[ -e $S/nouveau ] && printf '%-24s%8s  0\n' nouveau 2797568
+if [ -s $S/modules ]; then
+    while read -r m; do
+        [ -n "$m" ] && printf '%-24s%8s  0\n' "$m" 1000000
+    done < $S/modules
+fi
+exit 0
