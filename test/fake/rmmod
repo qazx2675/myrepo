@@ -1,0 +1,38 @@
+#!/bin/bash
+# 가짜 rmmod: nvidia/nvidia_drm/nvidia_modeset/nvidia_uvm/nouveau 는 상태 파일만 바꾸고,
+# 그 밖의 모듈 이름·옵션은 진짜 /usr/sbin/rmmod 로 넘긴다.
+#   busy=busy_always 이면 nvidia 는 사용 중이라 내려가지 않는다. nouveau_stuck 이 있으면 nouveau 도 실패.
+S=/var/lib/fakegpu
+real=()
+rc=0
+for a in "$@"; do
+    case "$a" in
+        nvidia|nvidia_drm|nvidia_modeset|nvidia_uvm)
+            if ! grep -qx "$a" $S/modules 2>/dev/null; then
+                echo "rmmod: ERROR: Module $a is not currently loaded" >&2; rc=1; continue
+            fi
+            if [ "$a" = nvidia ]; then
+                if [ "$(cat $S/busy 2>/dev/null)" = busy_always ]; then
+                    echo "rmmod: ERROR: Module nvidia is in use" >&2; rc=1; continue
+                fi
+                other=$(grep -E '^nvidia_' $S/modules | paste -sd, -)
+                if [ -n "$other" ]; then
+                    echo "rmmod: ERROR: Module nvidia is in use by: $other" >&2; rc=1; continue
+                fi
+            fi
+            sed -i "/^$a\$/d" $S/modules ;;
+        nouveau)
+            if [ ! -e $S/nouveau ]; then
+                echo "rmmod: ERROR: Module nouveau is not currently loaded" >&2; rc=1
+            elif [ -e $S/nouveau_stuck ]; then
+                echo "rmmod: ERROR: Module nouveau is in use" >&2; rc=1
+            else
+                rm -f $S/nouveau
+            fi ;;
+        *) real+=("$a") ;;
+    esac
+done
+if [ ${#real[@]} -gt 0 ]; then
+    /usr/sbin/rmmod "${real[@]}" || rc=$?
+fi
+exit $rc

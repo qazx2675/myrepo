@@ -1,0 +1,7 @@
+#!/bin/bash
+# 가짜 rpm: 'rpm -q kernel-devel-<커널>' 만 설치된 것처럼 답한다(테스트 VM 에 kernel-devel 이 없어서).
+# /var/lib/fakegpu/no_kdevel 이 있거나 진짜로 설치돼 있으면 진짜 rpm 결과를 쓴다. 그 밖의 호출은 진짜 rpm 으로 넘긴다.
+if [ $# -eq 2 ] && [ "$1" = -q ] && [[ "$2" == kernel-devel-* ]] && [ ! -e /var/lib/fakegpu/no_kdevel ]; then
+    /usr/bin/rpm -q "$2" >/dev/null 2>&1 || { echo "$2.fake"; exit 0; }
+fi
+exec /usr/bin/rpm "$@"

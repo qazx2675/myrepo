@@ -1,0 +1,28 @@
+#!/bin/sh
+# 가짜 NVIDIA 드라이버 설치파일 (gpu_install 테스트 전용, 실제 드라이버 아님).
+# 'sh <파일> -s' 로 실행하면 /var/lib/fakegpu 에 버전·CUDA 를 기록하고 nvidia 모듈을 '로드' 한다.
+#   /var/lib/fakegpu/busy = busy_once   : nvidia 모듈이 로드돼 있으면 실패(언로드 후 재시도하면 성공)
+#   /var/lib/fakegpu/busy = busy_always : 항상 실패
+VER=@VER@
+CUDA=@CUDA@
+S=/var/lib/fakegpu
+LOG=/var/log/nvidia-installer.log
+mkdir -p "$S"
+echo "$(date '+%F %T') run $0 $*" >> "$S/history"
+case " $* " in
+    *" -s "*) ;;
+    *) echo "가짜 설치파일: -s 로 실행하세요"; exit 1 ;;
+esac
+echo "nvidia-installer log file '$LOG' (fake $VER, $0)" > "$LOG"
+busy=$(cat "$S/busy" 2>/dev/null)
+if [ "$busy" = busy_always ] || { [ "$busy" = busy_once ] && grep -qx nvidia "$S/modules" 2>/dev/null; }; then
+    echo "ERROR: An NVIDIA kernel module 'nvidia' appears to already be loaded in your kernel and is in use (fake: $busy)." | tee -a "$LOG"
+    echo "$(date '+%F %T') result=fail($busy) $VER" >> "$S/history"
+    exit 1
+fi
+echo "$VER" > "$S/version"
+echo "$CUDA" > "$S/cuda"
+printf '%s\n' nvidia nvidia_modeset nvidia_uvm nvidia_drm > "$S/modules"
+echo "Installation of the NVIDIA Accelerated Graphics Driver for Linux-x86_64 (version: $VER) is now complete." | tee -a "$LOG"
+echo "$(date '+%F %T') result=ok $VER" >> "$S/history"
+exit 0

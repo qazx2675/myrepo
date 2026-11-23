@@ -1,0 +1,7 @@
+HOST   방식     이전→설치버전                CUDA  DCGM             dcgm상태                결과
+gpu01  mount  - → 550.54.14          12.4  4.2.3 cuda12     active/enabled/GPU 8  ok
+gpu02  scp    550.54.14 → 580.65.06  13.0  -                failed/enabled/GPU 0  fail: dcgm inactive, dcgm no gpu
+gpu03  scp    - → 470.1              11.4  skip(CUDA 11.4)  -                     ok
+gpu04  mount  550.54.14 → -          12.4  4.2.3 cuda12     active/enabled/GPU 8  skip: 같은 버전 설치됨
+gpu05  -      - → -                  -     -                -                     fail: 응답 없음
+gpu06  mount  - → -                  -     -                -                     fail: install failed(retry after unload)

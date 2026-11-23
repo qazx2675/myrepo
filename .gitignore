@@ -1,0 +1,8 @@
+# 실행 결과 (호스트별 로그, 실패 목록)
+logs/
+fail_list
+fail_list.retry
+# VM 시나리오 실행 결과 (test/run_scenarios.sh)
+test/out/
+# 현장 대상 목록 (샘플은 list.example)
+list
