@@ -29,6 +29,8 @@ func ParseArgs(args []string) (*Config, error) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
+		case "-h", "--help":
+			return nil, errHelp
 		case "-p", "-mount-user", "-gossh":
 			if i+1 >= len(args) {
 				return nil, fmt.Errorf("%s 옵션에 값이 필요합니다", a)

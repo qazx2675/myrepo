@@ -74,6 +74,8 @@ bash gpu_install.sh /autofs/nvidia ./list_a -p 5
 bash gpu_install.sh /autofs/nvidia fail_list.retry
 ```
 
+`bash gpu_install.sh -h` 로 준비 사항, list 형식, 진행 순서, 결과 파일, 종료코드를 볼 수 있습니다.
+
 AUTOFS_PATH 와 인자가 모두 비어 있으면 사용법을 출력하고 종료합니다. 종료코드는 Go 바이너리의 것을 그대로 씁니다
 (`0` 정상, `1` 실패 호스트 있음 또는 오류, `2` 스크립트 인자 오류).
 `fail_list`, `logs/` 는 **실행한 곳(현재 디렉토리)** 에 생깁니다.

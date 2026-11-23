@@ -13,8 +13,15 @@ import (
 // errHostsFailed 는 실패한 호스트가 있을 때 돌려준다(목록은 이미 출력했으므로 종료코드 1 만 낸다).
 var errHostsFailed = errors.New("실패한 호스트가 있습니다")
 
+// errHelp 는 -h 를 받았을 때 돌려준다(사용법을 출력하고 종료코드 0).
+var errHelp = errors.New("help")
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		if errors.Is(err, errHelp) {
+			fmt.Print(helpText)
+			return
+		}
 		if errors.Is(err, errHostsFailed) {
 			os.Exit(1)
 		}
