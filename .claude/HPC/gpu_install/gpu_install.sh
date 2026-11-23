@@ -22,7 +22,9 @@ POS=()
 OPTS=()
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help) usage; exit 0 ;;
+        -h|--help)   # 자세한 사용법은 바이너리가 출력한다
+            if [ -f "$BIN" ]; then [ -x "$BIN" ] || chmod +x "$BIN" 2>/dev/null; exec "$BIN" -h; fi
+            usage; exit 0 ;;
         -p)
             if [ $# -lt 2 ]; then echo "-p 옵션에 값이 필요합니다" >&2; exit 2; fi
             OPTS+=("-p" "$2"); shift 2 ;;
