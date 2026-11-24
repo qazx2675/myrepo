@@ -34,3 +34,16 @@ func benchRender(b *testing.B, onlyBad bool) {
 // 8000대 화면 한 장 그리기 비용(스크롤이 중간인 200x50 터미널).
 func BenchmarkRenderRun8000(b *testing.B)        { benchRender(b, false) }
 func BenchmarkRenderRun8000OnlyBad(b *testing.B) { benchRender(b, true) }
+
+// 8000대에서 ↓ 키 하나 처리 비용(키를 누르고 있으면 이만큼이 키마다 든다).
+func BenchmarkHandleKeyDown8000(b *testing.B) {
+	st := bigState(8000)
+	v := viewState{Scroll: 3000}
+	now := time.Now()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handleKey(&v, st, true, "down", 200, 50, now, tuiActions{})
+		v.Scroll = 3000
+	}
+}
