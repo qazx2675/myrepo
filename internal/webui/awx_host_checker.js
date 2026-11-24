@@ -735,6 +735,12 @@
     // 선명한 가독성과 엔터프라이즈 디자인을 위한 전용 스타일시트
     function getStylesheet() {
         return `
+        @keyframes awx-vld-switch-flash {
+            0% { background: #bae6fd; box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.65); }
+            60% { background: #e0f2fe; box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.35); }
+            100% { background: #f0f9ff; box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+        }
+        #awx-validator-panel .awx-vld-req-banner-flash { animation: awx-vld-switch-flash 1.8s ease-out; }
         #awx-validator-panel, .awx-vld-popup-root {
             font-family: "Pretendard Variable", "Pretendard", "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
             -webkit-font-smoothing: antialiased !important;
@@ -1745,6 +1751,16 @@
                 <!-- 요청 상세 브리핑 & 블라인드 카드 & 확인자 입력 영역 (선택 시 노출) -->
                 <div id="awx-vld-checker-content" style="display:${state.loadedCheckerSession ? 'flex' : 'none'}; flex-direction:column; gap:12px;">
                     
+                    <!-- 0. 현재 요청 식별 배너 (몇 번째 요청인지 / 전환 알림) -->
+                    <div id="awx-vld-chk-req-banner" style="display:none; border:2px solid #38bdf8; border-radius:6px; background:#f0f9ff; padding:8px 10px; font-size:12px; color:#0f172a;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                            <span id="awx-vld-chk-req-pos" style="font-weight:800; color:#0369a1; font-size:13px;">-</span>
+                            <span id="awx-vld-chk-req-time" class="awx-vld-mono" style="font-size:11px; color:#475569;">-</span>
+                        </div>
+                        <div id="awx-vld-chk-req-who" style="margin-top:3px; font-weight:600;">-</div>
+                        <div id="awx-vld-chk-req-switched" style="display:none; margin-top:4px; font-weight:700; color:#b45309;"></div>
+                    </div>
+
                     <!-- 1. 작업자 브리핑 카드 -->
                     <div class="awx-vld-card" style="background:#f8fafc; border-color:#cbd5e1;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -5530,13 +5546,19 @@
         window.awxRefreshWorkerSessionStatus = refreshWorkerSessionStatus;
 
         // 확인자: 대기 중인 세션 목록 조회
+        let decisionAdvancing = false;      // 승인/반려 후 다음 요청으로 넘어가는 중 (자동 로드 중복 방지)
+        let justDecidedSessionId = null;   // 방금 처리한 요청: 공유폴더 동기화 지연으로 PENDING 이 남아도 다시 띄우지 않음
         async function fetchPendingSessions() {
             try {
                 const myIp = state.agentInfo.ip || '';
                 const res = await agentFetch(`${AGENT_BASE}/api/session/list?clientIp=${myIp}`);
                 if (res.ok) {
                     const data = await res.json();
-                    const list = (data.sessions || []).filter(s => s.status === 'PENDING' || s.status === 'CHECKING');
+                    const allSessions = data.sessions || [];
+                    if (justDecidedSessionId && !allSessions.some(s => s.sessionId === justDecidedSessionId && (s.status === 'PENDING' || s.status === 'CHECKING'))) {
+                        justDecidedSessionId = null;
+                    }
+                    const list = allSessions.filter(s => (s.status === 'PENDING' || s.status === 'CHECKING') && s.sessionId !== justDecidedSessionId);
                     
                     // 새 승인 요청 감지 및 알림 트리거
                     list.forEach(s => {
@@ -5559,7 +5581,12 @@
                             html += `<option value="${s.sessionId}">${inc}${s.worker.name}님의 요청 (${s.sessionId})</option>`;
                         });
                         selPendingSessions.innerHTML = html;
-                        if (list.length === 1 && !state.loadedCheckerSession) {
+                        // 목록 재구성(3초 폴링) 시 선택 표시 유지
+                        if (state.loadedCheckerSession && list.some(s => s.sessionId === state.loadedCheckerSession.sessionId)) {
+                            selPendingSessions.value = state.loadedCheckerSession.sessionId;
+                        }
+                        updateCheckerBanner();
+                        if (list.length === 1 && !state.loadedCheckerSession && !decisionAdvancing) {
                             selPendingSessions.value = list[0].sessionId;
                             loadCheckerSession(list[0].sessionId);
                         }
@@ -5572,12 +5599,21 @@
         if (btnRefreshPending) btnRefreshPending.onclick = fetchPendingSessions;
 
         // Periodic 3-second background sync safety net for sharedDir polling
+        let reconnectTick = 0;
+        let reconnectInFlight = false;
         setInterval(() => {
-            if (state.agentInfo && state.agentInfo.connected) {
-                fetchPendingSessions();
-                if (state.currentSession && (state.currentSession.status === 'PENDING' || state.currentSession.status === 'CHECKING')) {
-                    refreshWorkerSessionStatus(state.currentSession.sessionId);
+            if (!state.agentInfo || !state.agentInfo.connected) {
+                // 일시 실패로 '미연결'이 된 뒤에도 스스로 재연결 (예전엔 여기서 영구히 멈춤). 독립 앱 3초, 북마클릿 30초 간격
+                reconnectTick++;
+                if (!fetchStatusRetryTimer && !reconnectInFlight && (isStandaloneApp || reconnectTick % 10 === 0)) {
+                    reconnectInFlight = true;
+                    fetchUsersAndStatus(true).finally(() => { reconnectInFlight = false; });
                 }
+                return;
+            }
+            fetchPendingSessions();
+            if (state.currentSession && (state.currentSession.status === 'PENDING' || state.currentSession.status === 'CHECKING')) {
+                refreshWorkerSessionStatus(state.currentSession.sessionId);
             }
         }, 3000);
         if (selPendingSessions) {
@@ -5586,10 +5622,60 @@
                 if (sid) {
                     loadCheckerSession(sid);
                 } else {
+                    resetCheckerInputs();
                     state.loadedCheckerSession = null;
                     if (checkerContent) checkerContent.style.display = 'none';
                 }
             };
+        }
+
+        // 확인자: 이전 요청에서 입력한 호스트/비교 결과 초기화
+        function resetCheckerInputs() {
+            if (txtChkDetail) txtChkDetail.value = '';
+            if (txtChkIncident) txtChkIncident.value = '';
+            if (txtChkTarget) txtChkTarget.value = '';
+            if (chkCntDetail) chkCntDetail.innerText = '0';
+            if (chkCntIncident) chkCntIncident.innerText = '0';
+            if (chkCntTarget) chkCntTarget.innerText = '0';
+            if (chkResultBox) { chkResultBox.style.display = 'none'; chkResultBox.innerHTML = ''; }
+            state.lastCompareResult = null;
+        }
+
+        // 확인자: 현재 보고 있는 요청 식별 배너 (switched=true 면 전환 강조 애니메이션 + 안내)
+        let reqBannerTimer = null;
+        let lastBannerSessionId = null;
+        function updateCheckerBanner() {
+            const sess = state.loadedCheckerSession;
+            const banner = getEl('awx-vld-chk-req-banner');
+            if (!banner) return;
+            if (!sess) { banner.style.display = 'none'; return; }
+            // 이전에 보던 요청이 있고 그것과 다를 때만 전환 강조 (첫 로드·같은 세션 폴링 재로드는 강조 안 함)
+            const switched = !!lastBannerSessionId && lastBannerSessionId !== sess.sessionId;
+            lastBannerSessionId = sess.sessionId;
+            const total = (state.pendingSessions || []).length;
+            const idx = (state.pendingSessions || []).findIndex(s => s.sessionId === sess.sessionId);
+            const posEl = getEl('awx-vld-chk-req-pos');
+            const timeEl = getEl('awx-vld-chk-req-time');
+            const whoEl = getEl('awx-vld-chk-req-who');
+            const swEl = getEl('awx-vld-chk-req-switched');
+            const sid = String(sess.sessionId || '');
+            const createdAt = sess.createdAt || (state.pendingSessions || []).find(s => s.sessionId === sess.sessionId)?.createdAt;
+            const workerName = sess.worker?.name || '-';
+            if (posEl) posEl.innerText = idx < 0 ? '대기 목록에 없음 (처리/이관됨)' : (total > 1 ? `요청 ${idx + 1} / ${total}` : '요청 1건');
+            if (timeEl) timeEl.innerText = createdAt ? dashFmtDateTime(createdAt) : '-';
+            if (whoEl) whoEl.innerHTML = `요청자 <b>${escapeHTML(workerName)}</b> (<span class="awx-vld-mono">${escapeHTML(sess.worker?.ip || '-')}</span>) · 세션 <span class="awx-vld-mono">…${escapeHTML(sid.slice(-6))}</span>`;
+            banner.style.display = 'block';
+            if (switched) {
+                if (swEl) { swEl.innerText = `다른 요청으로 전환됨: ${workerName}`; swEl.style.display = 'block'; }
+                banner.classList.remove('awx-vld-req-banner-flash');
+                void banner.offsetWidth;
+                banner.classList.add('awx-vld-req-banner-flash');
+                clearTimeout(reqBannerTimer);
+                reqBannerTimer = setTimeout(() => {
+                    banner.classList.remove('awx-vld-req-banner-flash');
+                    if (swEl) swEl.style.display = 'none';
+                }, 2000);
+            }
         }
 
         // 확인자: 특정 세션 로드 (블라인드 데이터 포함)
@@ -5603,7 +5689,11 @@
                     return;
                 }
                 const sess = await res.json();
+                // 다른 요청으로 바뀔 때만 입력/결과 초기화 (같은 세션 폴링 재로드는 입력 유지)
+                const sessionSwitched = state.loadedCheckerSession?.sessionId !== sess.sessionId;
+                if (sessionSwitched) resetCheckerInputs();
                 state.loadedCheckerSession = sess;
+                updateCheckerBanner();
 
                 if (checkerContent) checkerContent.style.display = 'flex';
                 if (chkWorkerName) chkWorkerName.innerText = sess.worker?.name || '-';
@@ -5906,8 +5996,25 @@
                 if (!res.ok) throw new Error(resData.error || "결정 제출 실패");
 
                 alert(decision === 'APPROVED' ? "크로스체크가 승인 완료되었습니다." : "작업자에게 반려 요청이 전송되었습니다.");
-                fetchPendingSessions();
-                loadCheckerSession(sid);
+                // 처리 끝난 요청의 입력/결과를 비우고, 남은 요청이 있으면 다음 요청을 자동 로드
+                resetCheckerInputs();
+                state.loadedCheckerSession = null;
+                if (checkerContent) checkerContent.style.display = 'none';
+                if (selPendingSessions) selPendingSessions.value = '';
+                justDecidedSessionId = sid;
+                decisionAdvancing = true;
+                try {
+                    await fetchPendingSessions();
+                    if (!state.loadedCheckerSession && selPendingSessions && state.pendingSessions.length > 0) {
+                        const next = state.pendingSessions.find(s => s.sessionId !== sid) || null;
+                        if (next) {
+                            selPendingSessions.value = next.sessionId;
+                            await loadCheckerSession(next.sessionId);
+                        }
+                    }
+                } finally {
+                    decisionAdvancing = false;
+                }
             } catch (err) {
                 alert("결정 제출 실패: " + err.message);
             }

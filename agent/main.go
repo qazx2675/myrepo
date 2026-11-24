@@ -326,6 +326,19 @@ func (h *WSHub) BridgeCount() int {
 	return cnt
 }
 
+// AppClientCount counts non-bridge clients (the app window / checker panel).
+func (h *WSHub) AppClientCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	cnt := 0
+	for c := range h.clients {
+		if !c.IsBridge {
+			cnt++
+		}
+	}
+	return cnt
+}
+
 func (h *WSHub) BroadcastJSON(v interface{}) {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -1591,7 +1604,7 @@ func (s *AgentServer) handleAppRoot(w http.ResponseWriter, r *http.Request) {
 	webui.ServeIndex(w, r)
 }
 
-const agentBuildTag = "20261119-dashboard-admin-rel"
+const agentBuildTag = "20261124-checker-alive-switch"
 
 // handleHealth: GET /api/health
 func (s *AgentServer) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -1664,6 +1677,11 @@ func (s *AgentServer) StartLifecycleWatcher(onShutdown func()) {
 				return
 			case <-ticker.C:
 				s.lifecycleMu.Lock()
+				// 앱 창의 WebSocket 이 열려 있으면 창은 살아 있음: 최소화·백그라운드로 타이머 ping 이
+				// 늦어져도 닫힘으로 오판해 종료하지 않도록 (창이 닫히면 WS 도 끊기므로 그때부터 15초 판정)
+				if s.wsHub != nil && s.wsHub.AppClientCount() > 0 {
+					s.lastPingTime = time.Now()
+				}
 				seen := s.hasSeenClient
 				lastPing := s.lastPingTime
 				bye := s.byeReceived
