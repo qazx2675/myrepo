@@ -1,0 +1,16 @@
+# HPE iLO 관리망 IP 목록 예시 파일
+# 이 파일을 worklist.txt 로 복사한 뒤 실제 대상 서버의 iLO IP를 한 줄에 하나씩 입력하세요.
+#
+# 규칙:
+# - '#' 이후 내용은 주석으로 무시됩니다.
+# - 빈 줄과 앞뒤 공백은 자동으로 제거됩니다.
+# - 동일 세대/동일 디스크 구성의 서버끼리 묶어서 실행하는 것을 권장합니다.
+
+# 예시: ProLiant DL380 Gen10 (iLO 5 / Smart Array SR)
+10.10.0.1
+
+# 예시: ProLiant DL380 Gen10 Plus (iLO 5 / MR416i-a MegaRAID)
+10.10.0.2
+
+# 예시: ProLiant DL380 Gen11 (iLO 6 / SR932i-p)
+10.10.0.3
