@@ -21,7 +21,7 @@ fi
 
 case "${1:-}" in
     --uninstall)
-        for f in "$BIN_DIR/mn" "$PROFILED_DIR/mn.sh" "$PROFILED_DIR/mn.csh"; do
+        for f in "$BIN_DIR/mn" "$BIN_DIR/mn-restore" "$PROFILED_DIR/mn.sh" "$PROFILED_DIR/mn.csh"; do
             if [ -e "$f" ]; then
                 rm -f "$f" && echo "제거: $f"
             else
@@ -39,7 +39,7 @@ case "${1:-}" in
         ;;
 esac
 
-for f in mn profile.d/mn.sh profile.d/mn.csh; do
+for f in mn mn-restore profile.d/mn.sh profile.d/mn.csh; do
     if [ ! -f "$SCRIPT_DIR/$f" ]; then
         echo "오류: 설치 파일이 없습니다: $SCRIPT_DIR/$f" >&2
         exit 1
@@ -50,6 +50,8 @@ mkdir -p "$BIN_DIR" "$PROFILED_DIR" || exit 1
 
 install -m 755 "$SCRIPT_DIR/mn" "$BIN_DIR/mn" || exit 1
 echo "설치: $BIN_DIR/mn"
+install -m 755 "$SCRIPT_DIR/mn-restore" "$BIN_DIR/mn-restore" || exit 1
+echo "설치: $BIN_DIR/mn-restore"
 install -m 644 "$SCRIPT_DIR/profile.d/mn.sh" "$PROFILED_DIR/mn.sh" || exit 1
 echo "설치: $PROFILED_DIR/mn.sh"
 install -m 644 "$SCRIPT_DIR/profile.d/mn.csh" "$PROFILED_DIR/mn.csh" || exit 1

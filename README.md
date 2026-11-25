@@ -52,6 +52,40 @@ gossh | gossh -w a "uptime" 처럼 사용, 기타 옵션
 - 공백으로 시작하는 줄은 바로 앞 항목의 설명에 이어 붙습니다.
 - `#` 주석과 빈 줄은 무시합니다.
 
+## 데이터는 어디에 저장되나
+
+`mn` 이 보여 주는 내용은 전부 **설정 파일 하나**에서 읽습니다. 따로 캐시하거나 다른 곳에 저장하지 않습니다.
+
+- 기본 위치: `/etc/dir/dir.conf`
+- `MN_CONF` 환경변수가 설정돼 있으면 그 파일을 대신 읽습니다.
+- `mn add` 로 추가한 항목도 같은 파일에 들어갑니다.
+
+확인 방법:
+
+```bash
+echo "${MN_CONF:-/etc/dir/dir.conf}"      # mn 이 읽는 파일 경로
+ls -l "${MN_CONF:-/etc/dir/dir.conf}"      # 파일이 있는지, 수정 시각
+cat "${MN_CONF:-/etc/dir/dir.conf}"        # 내용
+```
+
+csh/tcsh 에서는 `echo $MN_CONF` (비어 있으면 `/etc/dir/dir.conf`) 로 확인합니다.
+
+## mn 출력으로 dir.conf 복원 (`mn-restore`)
+
+설정 파일이 사라졌거나 망가졌는데 `mn` 출력은 남아 있을 때, 그 출력을 다시 `dir.conf` 로 되돌립니다.
+
+```bash
+mn-restore                      # 현재 mn 출력으로 /etc/dir/dir.conf 복원
+mn > saved.txt                  # (미리 저장해 둔 출력이 있을 때)
+mn-restore -i saved.txt         # 저장해 둔 출력으로 복원
+mn-restore -i saved.txt -o -    # 파일을 건드리지 않고 화면에만 출력해 확인
+```
+
+- 기존 출력 파일이 있으면 `파일.bak.<시각>` 으로 백업한 뒤 덮어씁니다.
+- 색 코드는 자동으로 제거합니다.
+- 복원한 conf 로 `mn` 을 다시 실행해 입력과 같은지 확인하고 결과를 알려 줍니다.
+- 복원되지 않는 것: `#` 주석, 빈 줄, 번호 `[n]`. 경로의 `~` 는 절대경로로 복원됩니다.
+
 ## 예상 출력
 
 ```
@@ -91,6 +125,7 @@ mn() { /usr/local/bin/mn "$@"; . "$HOME/.mn_cd"; }
 ## 파일 구성
 
 - `mn` — 본체 스크립트 (`/usr/local/bin/mn` 으로 설치)
+- `mn-restore` — mn 출력으로 `dir.conf` 복원 (`/usr/local/bin/mn-restore` 로 설치)
 - `dir.conf.sample` — `dir.conf` 샘플 (`/etc/dir/dir.conf` 가 없을 때 복사)
 - `profile.d/mn.sh` — bash 함수 (`/etc/profile.d/mn.sh` 로 설치)
 - `profile.d/mn.csh` — csh/tcsh alias (`/etc/profile.d/mn.csh` 로 설치)
