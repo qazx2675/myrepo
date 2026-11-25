@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - ilo
+  pull_request:
+    branches:
+      - main
+      - master
+      - ilo
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check bash syntax
+        run: |
+          chmod +x change_ilo_ip.sh tests/mock_ilorest tests/run_tests.sh
+          bash -n change_ilo_ip.sh tests/mock_ilorest tests/run_tests.sh
+
+      - name: Run E2E mock tests
+        run: bash tests/run_tests.sh

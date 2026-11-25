@@ -1,0 +1,560 @@
+#!/usr/bin/env bash
+# Stateful Bash mock of HPE ilorest CLI for E2E testing (Bash 4.1+ compatible)
+
+set -eo pipefail
+
+STATE_DIR="${MOCK_ILOREST_STATE_DIR:-/tmp/mock_ilorest_state}"
+MOCK_USER="${MOCK_USER:-Administrator}"
+MOCK_PASS="${MOCK_PASS:-Pass123!}"
+
+# Prelink corruption simulation
+if [[ "${MOCK_PRELINK_ERR:-0}" == "1" ]]; then
+    echo "Cannot open self /usr/sbin/ilorest" >&2
+    exit 1
+fi
+
+ip_in_csv() {
+    local target="$1"
+    local csv="${2:-}"
+    local item=""
+    local old_ifs="$IFS"
+    IFS=','
+    for item in $csv; do
+        item="${item#"${item%%[![:space:]]*}"}"
+        item="${item%"${item##*[![:space:]]}"}"
+        if [[ -n "$item" && "$item" == "$target" ]]; then
+            IFS="$old_ifs"
+            return 0
+        fi
+    done
+    IFS="$old_ifs"
+    return 1
+}
+
+write_host_meta() {
+    local host_ip="$1"
+    local gen="$2"
+    local fw="$3"
+    local oem="$4"
+    local ifaces="$5"
+    local hdir="$STATE_DIR/hosts/$host_ip"
+    mkdir -p "$hdir"
+    cat > "$hdir/meta.env" <<EOF
+HOST_GEN='$gen'
+HOST_FW='$fw'
+HOST_OEM='$oem'
+HOST_IFACES='$ifaces'
+EOF
+}
+
+write_host_iface() {
+    local host_ip="$1"
+    local id="$2"
+    local if_ip="$3"
+    local subnet="$4"
+    local gw="$5"
+    local dhcp="$6"
+    local oem_dhcp="$7"
+    local vlan_enable="$8"
+    local vlan_id="$9"
+    local name="${10}"
+    local mac="${11}"
+    local hdir="$STATE_DIR/hosts/$host_ip"
+    mkdir -p "$hdir"
+    cat > "$hdir/iface_${id}.env" <<EOF
+IF_IP='$if_ip'
+IF_SUBNET='$subnet'
+IF_GW='$gw'
+IF_DHCP='$dhcp'
+IF_OEM_DHCP='$oem_dhcp'
+IF_VLAN_ENABLE='$vlan_enable'
+IF_VLAN_ID='$vlan_id'
+IF_NAME='$name'
+IF_MAC='$mac'
+EOF
+}
+
+init_state() {
+    rm -rf "$STATE_DIR"
+    mkdir -p "$STATE_DIR/hosts" "$STATE_DIR/patches"
+    : > "$STATE_DIR/call_history.log"
+    : > "$STATE_DIR/active_ip"
+
+    # 10.10.10.101: iLO 5 (Gen10), Dedicated /1/ (Oem.Hpe.DHCPv4), DHCP=true, VLAN=false/0, /2/ unused
+    write_host_meta "10.10.10.101" "iLO 5" "iLO 5 v3.01" "Hpe" "1 2"
+    write_host_iface "10.10.10.101" "1" "10.10.10.101" "255.255.255.0" "10.10.10.1" "true" "true" "false" "0" "Dedicated Network Interface" "14:02:ec:aa:bb:01"
+    write_host_iface "10.10.10.101" "2" "0.0.0.0" "0.0.0.0" "0.0.0.0" "false" "false" "false" "0" "Shared Network Port" "14:02:ec:aa:bb:02"
+
+    # 10.10.10.102: iLO 4 (Gen9), Shared /2/ (Oem.Hp.DHCPv4), /1/ has 10.10.10.10 (boundary check)
+    write_host_meta "10.10.10.102" "iLO 4" "iLO 4 v2.82" "Hp" "1 2"
+    write_host_iface "10.10.10.102" "1" "10.10.10.10" "255.255.255.0" "10.10.10.1" "false" "false" "false" "0" "Dedicated Network Interface" "14:02:ec:cc:dd:01"
+    write_host_iface "10.10.10.102" "2" "10.10.10.102" "255.255.255.0" "10.10.10.1" "false" "false" "false" "0" "Shared Network Port" "14:02:ec:cc:dd:02"
+
+    # 10.10.10.103: iLO 6 (Gen11), Dedicated /1/ (Oem.Hpe.DHCPv4), VLANEnable=true, VLANId=99
+    write_host_meta "10.10.10.103" "iLO 6" "iLO 6 v1.55" "Hpe" "1 2"
+    write_host_iface "10.10.10.103" "1" "10.10.10.103" "255.255.255.0" "10.10.10.1" "false" "false" "true" "99" "Dedicated Network Interface" "14:02:ec:ee:ff:01"
+    write_host_iface "10.10.10.103" "2" "0.0.0.0" "0.0.0.0" "0.0.0.0" "false" "false" "false" "0" "Shared Network Port" "14:02:ec:ee:ff:02"
+
+    # 10.0.0.10 and 10.0.0.1: IP boundary matching fixtures (/1/ vs /2/)
+    write_host_meta "10.0.0.10" "iLO 5" "iLO 5 v2.78" "Hpe" "1 2"
+    write_host_iface "10.0.0.10" "1" "10.0.0.1" "255.255.255.0" "10.0.0.254" "false" "false" "false" "0" "Dedicated Network Interface" "14:02:ec:11:22:01"
+    write_host_iface "10.0.0.10" "2" "10.0.0.10" "255.255.255.0" "10.0.0.254" "false" "false" "false" "0" "Shared Network Port" "14:02:ec:11:22:02"
+
+    write_host_meta "10.0.0.1" "iLO 5" "iLO 5 v2.78" "Hpe" "1 2"
+    write_host_iface "10.0.0.1" "1" "10.0.0.10" "255.255.255.0" "10.0.0.254" "false" "false" "false" "0" "Dedicated Network Interface" "14:02:ec:33:44:01"
+    write_host_iface "10.0.0.1" "2" "10.0.0.1" "255.255.255.0" "10.0.0.254" "false" "false" "false" "0" "Shared Network Port" "14:02:ec:33:44:02"
+
+    touch "$STATE_DIR/.initialized"
+}
+
+ensure_initialized() {
+    if [[ ! -f "$STATE_DIR/.initialized" ]]; then
+        init_state
+    fi
+}
+
+log_history() {
+    echo "$*" >> "$STATE_DIR/call_history.log"
+}
+
+get_active_ip() {
+    if [[ -f "$STATE_DIR/active_ip" ]]; then
+        cat "$STATE_DIR/active_ip"
+    fi
+}
+
+# Strip --nologo anywhere in arguments
+ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--nologo" ]]; then
+        continue
+    fi
+    ARGS+=("$arg")
+done
+
+if [[ ${#ARGS[@]} -eq 0 ]]; then
+    ensure_initialized
+    echo "HPE RESTful Interface Tool version 4.5.0.0 (mock)"
+    exit 0
+fi
+
+CMD="${ARGS[0]}"
+
+case "$CMD" in
+    --init)
+        init_state
+        exit 0
+        ;;
+    --version|-v|version)
+        ensure_initialized
+        echo "HPE RESTful Interface Tool version 4.5.0.0 (mock)"
+        exit 0
+        ;;
+    --help|-h|help)
+        ensure_initialized
+        echo "Usage: ilorest [--nologo] <command> [options]"
+        echo "Commands: login, logout, rawget, rawpatch, iloreset"
+        exit 0
+        ;;
+esac
+
+ensure_initialized
+
+case "$CMD" in
+    logout)
+        active="$(get_active_ip)"
+        if [[ -n "$active" ]]; then
+            log_history "LOGOUT $active"
+        else
+            log_history "LOGOUT none"
+        fi
+        : > "$STATE_DIR/active_ip"
+        exit 0
+        ;;
+
+    login)
+        target_ip=""
+        user=""
+        pass=""
+        idx=1
+        while [[ $idx -lt ${#ARGS[@]} ]]; do
+            tok="${ARGS[$idx]}"
+            case "$tok" in
+                -u|--user)
+                    idx=$((idx + 1))
+                    user="${ARGS[$idx]:-}"
+                    ;;
+                -p|--password)
+                    idx=$((idx + 1))
+                    pass="${ARGS[$idx]:-}"
+                    ;;
+                --url)
+                    idx=$((idx + 1))
+                    target_ip="${ARGS[$idx]:-}"
+                    ;;
+                *)
+                    if [[ -z "$target_ip" && "$tok" != -* ]]; then
+                        target_ip="$tok"
+                    fi
+                    ;;
+            esac
+            idx=$((idx + 1))
+        done
+
+        # Strip https:// if provided
+        target_ip="${target_ip#https://}"
+        target_ip="${target_ip#http://}"
+        target_ip="${target_ip%%/*}"
+
+        if [[ -z "$target_ip" ]]; then
+            echo "ERROR: Target IP is required for login." >&2
+            exit 1
+        fi
+
+        if ip_in_csv "$target_ip" "${MOCK_UNREACHABLE_IPS:-}"; then
+            log_history "LOGIN_UNREACHABLE $target_ip"
+            echo "ERROR: Unable to connect to https://${target_ip}: Connection timed out" >&2
+            exit 1
+        fi
+
+        if ip_in_csv "$target_ip" "${MOCK_AUTH_FAIL_IPS:-}"; then
+            log_history "LOGIN_AUTH_FAIL $target_ip"
+            echo "ERROR: Authentication failed for ${target_ip} (Invalid credentials)" >&2
+            exit 1
+        fi
+
+        if [[ "$user" != "$MOCK_USER" || "$pass" != "$MOCK_PASS" ]]; then
+            log_history "LOGIN_AUTH_FAIL $target_ip"
+            echo "ERROR: Invalid username or password for ${target_ip}" >&2
+            exit 1
+        fi
+
+        if [[ ! -d "$STATE_DIR/hosts/$target_ip" ]]; then
+            log_history "LOGIN_UNKNOWN_HOST $target_ip"
+            echo "ERROR: Unable to connect to https://${target_ip}: Host unreachable" >&2
+            exit 1
+        fi
+
+        printf '%s' "$target_ip" > "$STATE_DIR/active_ip"
+        log_history "LOGIN $target_ip user=$user"
+        echo "Discovering data...Done"
+        exit 0
+        ;;
+
+    rawget)
+        active="$(get_active_ip)"
+        if [[ -z "$active" ]]; then
+            echo "ERROR: Not logged in. Run login first." >&2
+            exit 1
+        fi
+
+        uri="${ARGS[1]:-}"
+        if [[ -z "$uri" ]]; then
+            echo "ERROR: rawget requires a URI." >&2
+            exit 1
+        fi
+
+        # Normalize trailing slash for matching
+        norm_uri="${uri%/}"
+        log_history "RAWGET $active $uri"
+
+        hdir="$STATE_DIR/hosts/$active"
+        if [[ ! -f "$hdir/meta.env" ]]; then
+            echo "ERROR: Host state missing for $active" >&2
+            exit 1
+        fi
+        # shellcheck disable=SC1090
+        source "$hdir/meta.env"
+
+        case "$norm_uri" in
+            /redfish/v1/Managers/1)
+                cat <<EOF
+{
+  "@odata.context": "/redfish/v1/\$metadata#Manager.Manager",
+  "@odata.id": "/redfish/v1/Managers/1",
+  "@odata.type": "#Manager.v1_5_1.Manager",
+  "Id": "1",
+  "Name": "Manager",
+  "FirmwareVersion": "$HOST_FW",
+  "Model": "$HOST_GEN",
+  "EthernetInterfaces": {
+    "@odata.id": "/redfish/v1/Managers/1/EthernetInterfaces"
+  }
+}
+EOF
+                exit 0
+                ;;
+
+            /redfish/v1/Managers/1/EthernetInterfaces)
+                echo '{'
+                echo '  "@odata.context": "/redfish/v1/$metadata#EthernetInterfaceCollection.EthernetInterfaceCollection",'
+                echo '  "@odata.id": "/redfish/v1/Managers/1/EthernetInterfaces",'
+                echo '  "@odata.type": "#EthernetInterfaceCollection.EthernetInterfaceCollection",'
+                echo '  "Name": "Manager Ethernet Interface Collection",'
+                echo '  "Members": ['
+                iface_arr=($HOST_IFACES)
+                total_ifaces=${#iface_arr[@]}
+                i=0
+                for if_id in "${iface_arr[@]}"; do
+                    i=$((i + 1))
+                    comma=","
+                    if [[ $i -eq $total_ifaces ]]; then
+                        comma=""
+                    fi
+                    echo "    {"
+                    echo "      \"@odata.id\": \"/redfish/v1/Managers/1/EthernetInterfaces/${if_id}/\""
+                    echo "    }${comma}"
+                done
+                echo '  ],'
+                echo "  \"Members@odata.count\": ${total_ifaces}"
+                echo '}'
+                exit 0
+                ;;
+
+            /redfish/v1/Managers/1/EthernetInterfaces/*)
+                if_id="${norm_uri##*/}"
+                if [[ ! -f "$hdir/iface_${if_id}.env" ]]; then
+                    echo "ERROR: Resource not found: $uri" >&2
+                    exit 1
+                fi
+                # shellcheck disable=SC1090
+                source "$hdir/iface_${if_id}.env"
+
+                addr_origin="Static"
+                static_block=""
+                if [[ "$IF_DHCP" == "true" ]]; then
+                    addr_origin="DHCP"
+                    static_block="[]"
+                else
+                    static_block=$(cat <<STATIC_EOF
+[
+    {
+      "Address": "$IF_IP",
+      "Gateway": "$IF_GW",
+      "SubnetMask": "$IF_SUBNET"
+    }
+  ]
+STATIC_EOF
+)
+                fi
+
+                if [[ "$IF_IP" == "0.0.0.0" ]]; then
+                    ipv4_block="[]"
+                    static_block="[]"
+                else
+                    ipv4_block=$(cat <<IPV4_EOF
+[
+    {
+      "Address": "$IF_IP",
+      "AddressOrigin": "$addr_origin",
+      "Gateway": "$IF_GW",
+      "SubnetMask": "$IF_SUBNET"
+    }
+  ]
+IPV4_EOF
+)
+                fi
+
+                cat <<EOF
+{
+  "@odata.context": "/redfish/v1/\$metadata#EthernetInterface.EthernetInterface",
+  "@odata.id": "/redfish/v1/Managers/1/EthernetInterfaces/${if_id}/",
+  "@odata.type": "#EthernetInterface.v1_4_1.EthernetInterface",
+  "Id": "${if_id}",
+  "Name": "${IF_NAME}",
+  "InterfaceEnabled": true,
+  "MACAddress": "${IF_MAC}",
+  "DHCPv4": {
+    "DHCPEnabled": ${IF_DHCP}
+  },
+  "IPv4Addresses": ${ipv4_block},
+  "IPv4StaticAddresses": ${static_block},
+  "Oem": {
+    "${HOST_OEM}": {
+      "DHCPv4": {
+        "Enabled": ${IF_OEM_DHCP}
+      }
+    }
+  },
+  "VLAN": {
+    "VLANEnable": ${IF_VLAN_ENABLE},
+    "VLANId": ${IF_VLAN_ID}
+  }
+}
+EOF
+                exit 0
+                ;;
+
+            *)
+                echo "ERROR: Unknown Redfish URI: $uri" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+
+    rawpatch)
+        active="$(get_active_ip)"
+        if [[ -z "$active" ]]; then
+            echo "ERROR: Not logged in. Run login first." >&2
+            exit 1
+        fi
+
+        patch_file="${ARGS[1]:-}"
+        if [[ -z "$patch_file" || ! -r "$patch_file" ]]; then
+            echo "ERROR: Patch JSON file missing or unreadable: $patch_file" >&2
+            exit 1
+        fi
+
+        if ip_in_csv "$active" "${MOCK_PATCH_FAIL_IPS:-}"; then
+            log_history "RAWPATCH_FAIL $active file=$(basename "$patch_file")"
+            echo "ERROR: rawpatch failed on $active (HTTP 400/500 simulated)" >&2
+            exit 1
+        fi
+
+        hdir="$STATE_DIR/hosts/$active"
+        # shellcheck disable=SC1090
+        source "$hdir/meta.env"
+
+        # Find which interface URI key is in the patch JSON
+        matched_if_id=""
+        matched_uri=""
+        for if_id in $HOST_IFACES; do
+            if grep -q "\"/redfish/v1/Managers/1/EthernetInterfaces/${if_id}/*\"" "$patch_file"; then
+                matched_if_id="$if_id"
+                matched_uri="/redfish/v1/Managers/1/EthernetInterfaces/${if_id}/"
+                break
+            fi
+        done
+
+        if [[ -z "$matched_if_id" ]]; then
+            log_history "RAWPATCH_INVALID_URI $active"
+            echo "ERROR: Patch JSON does not contain a valid EthernetInterfaces URI for $active" >&2
+            exit 1
+        fi
+
+        # Verify that the patched interface is the one holding active IP
+        # shellcheck disable=SC1090
+        source "$hdir/iface_${matched_if_id}.env"
+        if [[ "$IF_IP" != "$active" ]]; then
+            log_history "RAWPATCH_WRONG_IFACE $active uri=$matched_uri actual_ip=$IF_IP"
+            echo "ERROR: Patched interface $matched_uri has IP $IF_IP, expected $active" >&2
+            exit 1
+        fi
+
+        # Validate required sections
+        for req_key in '"DHCPv4"' '"IPv4StaticAddresses"' '"VLAN"'; do
+            if ! grep -q "$req_key" "$patch_file"; then
+                log_history "RAWPATCH_MISSING_KEY $active key=$req_key"
+                echo "ERROR: Patch JSON missing required key $req_key" >&2
+                exit 1
+            fi
+        done
+
+        # Extract JSON fields safely using awk
+        extract_json_str() {
+            local key="$1"
+            awk -v k="\"$key\"" '
+                index($0, k) {
+                    line = $0
+                    sub(".*" k "[[:space:]]*:[[:space:]]*\"", "", line)
+                    sub("\".*", "", line)
+                    print line
+                    exit
+                }
+            ' "$patch_file"
+        }
+
+        extract_json_scalar() {
+            local key="$1"
+            awk -v k="\"$key\"" '
+                index($0, k) {
+                    line = $0
+                    sub(".*" k "[[:space:]]*:[[:space:]]*", "", line)
+                    sub("[,[:space:]}].*", "", line)
+                    print line
+                    exit
+                }
+            ' "$patch_file"
+        }
+
+        new_ip="$(extract_json_str "Address")"
+        new_mask="$(extract_json_str "SubnetMask")"
+        new_gw="$(extract_json_str "Gateway")"
+        new_dhcp="$(extract_json_scalar "DHCPEnabled")"
+        new_vlan_enable="$(extract_json_scalar "VLANEnable")"
+        new_vlan_id="$(extract_json_scalar "VLANId")"
+
+        new_oem_dhcp="false"
+        if grep -q "\"${HOST_OEM}\"" "$patch_file"; then
+            new_oem_dhcp="$(extract_json_scalar "Enabled")"
+        fi
+
+        if [[ -z "$new_ip" || -z "$new_mask" || -z "$new_gw" || -z "$new_dhcp" || -z "$new_vlan_enable" ]]; then
+            log_history "RAWPATCH_INVALID_PAYLOAD $active"
+            echo "ERROR: Incomplete IPv4/DHCPv4/VLAN fields in patch JSON" >&2
+            exit 1
+        fi
+
+        if [[ "$new_vlan_enable" == "false" ]]; then
+            new_vlan_id="${new_vlan_id:-0}"
+        elif [[ "$new_vlan_enable" == "true" ]]; then
+            if [[ -z "$new_vlan_id" || ! "$new_vlan_id" =~ ^[0-9]+$ || "$new_vlan_id" -lt 1 || "$new_vlan_id" -gt 4094 ]]; then
+                log_history "RAWPATCH_INVALID_VLAN $active vlan_id=$new_vlan_id"
+                echo "ERROR: Invalid VLANId in patch JSON: $new_vlan_id" >&2
+                exit 1
+            fi
+        else
+            echo "ERROR: Invalid VLANEnable value: $new_vlan_enable" >&2
+            exit 1
+        fi
+
+        cp "$patch_file" "$STATE_DIR/patches/${active}.json"
+        cat > "$hdir/pending.env" <<EOF
+PEND_IF_ID='$matched_if_id'
+PEND_IP='$new_ip'
+PEND_SUBNET='$new_mask'
+PEND_GW='$new_gw'
+PEND_DHCP='$new_dhcp'
+PEND_OEM_DHCP='$new_oem_dhcp'
+PEND_VLAN_ENABLE='$new_vlan_enable'
+PEND_VLAN_ID='$new_vlan_id'
+EOF
+
+        log_history "RAWPATCH $active uri=$matched_uri ip=$new_ip mask=$new_mask gw=$new_gw dhcp=$new_dhcp oem_dhcp=$new_oem_dhcp vlan_enable=$new_vlan_enable vlan_id=$new_vlan_id"
+        echo "Patch applied (pending iLO reset)."
+        exit 0
+        ;;
+
+    iloreset)
+        active="$(get_active_ip)"
+        if [[ -z "$active" ]]; then
+            echo "ERROR: Not logged in. Run login first." >&2
+            exit 1
+        fi
+
+        log_history "ILORESET $active"
+        hdir="$STATE_DIR/hosts/$active"
+        if [[ -f "$hdir/pending.env" ]]; then
+            # shellcheck disable=SC1090
+            source "$hdir/pending.env"
+            # shellcheck disable=SC1090
+            source "$hdir/iface_${PEND_IF_ID}.env"
+
+            write_host_iface "$active" "$PEND_IF_ID" "$PEND_IP" "$PEND_SUBNET" "$PEND_GW" "$PEND_DHCP" "$PEND_OEM_DHCP" "$PEND_VLAN_ENABLE" "$PEND_VLAN_ID" "$IF_NAME" "$IF_MAC"
+            rm -f "$hdir/pending.env"
+
+            if [[ "$PEND_IP" != "$active" && ! -d "$STATE_DIR/hosts/$PEND_IP" ]]; then
+                mv "$hdir" "$STATE_DIR/hosts/$PEND_IP"
+            fi
+        fi
+
+        : > "$STATE_DIR/active_ip"
+        echo "Resetting iLO..."
+        exit 0
+        ;;
+
+    *)
+        echo "ERROR: Unknown mock command: $CMD" >&2
+        exit 1
+        ;;
+esac
