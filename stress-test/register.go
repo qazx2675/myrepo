@@ -93,8 +93,14 @@ func inventoryDeleteCmd(user string) string {
 	return "bash /root/server/delhost_" + user
 }
 
-// 삭제 확인에서 "삭제 전과 같음" 일 때 다시 조회하며 기다리는 최대 시간.
-const deleteCheckWait = 30 * time.Second
+// 삭제 확인의 대기 시간. AWX 가 호스트를 뒤에서 지우는 동안(수백 대면 몇 분) 삭제 전 호스트가 줄어드는 한 기다린다.
+const (
+	deleteStallWait = 60 * time.Second // 남은 호스트(삭제 전에 있던 것)가 이 시간 동안 줄지 않으면 판정(중지)
+	deleteMaxWait   = 10 * time.Minute // 줄어드는 중이어도 이 시간을 넘으면 중지
+)
+
+// 등록·동기화 뒤 완전일치 확인이 어긋나면 poll_interval 간격으로 다시 조회하는 횟수(반영이 늦은 경우).
+const matchRetries = 6
 
 // inventoryHostSet 은 인벤토리 호스트 목록에서 exclude 를 빼고 소문자 키 → 원래 이름 맵으로 만든다.
 func inventoryHostSet(list, exclude []string) map[string]string {
@@ -169,37 +175,57 @@ func (a *app) inventoryDelete() error {
 	if interval <= 0 {
 		interval = time.Second
 	}
+	// 삭제 전에 있던 호스트가 모두 사라질 때까지 기다린다. 줄어드는 동안은 deleteMaxWait 까지, 줄지 않으면 deleteStallWait 뒤 중지.
+	// 조회 오류(삭제 중 AWX 부하 등)는 기한 안에서는 다시 조회하고, 기한까지 계속 실패하면 확인 불가로 중지한다.
 	start := nowFn()
+	lastProgress, prevLeft := start, len(before)
+	var left map[string]string
+	var lastErr error
 	for {
 		afterRaw, err := a.readInventoryHosts()
+		lastErr = err
 		if err != nil {
-			return unverified("삭제 뒤", err)
-		}
-		after := inventoryHostSet(afterRaw, a.cfg.InventoryMatchExclude)
-		if len(after) == 0 {
-			pass(0)
-			return nil
-		}
-		same := len(after) == len(before)
-		for k := range after {
-			if _, ok := before[k]; !ok {
-				same = false
+			a.logf("%s 인벤토리 삭제 확인 조회 실패(다시 조회합니다): %v", markWarn, err)
+		} else {
+			after := inventoryHostSet(afterRaw, a.cfg.InventoryMatchExclude)
+			left = map[string]string{}
+			for k, h := range after {
+				if _, ok := before[k]; ok {
+					left[k] = h
+				}
+			}
+			if len(left) == 0 {
+				if len(after) > 0 { // 삭제 전에 없던 호스트(다른 사람이 넣은 것 등)는 등록 뒤 완전일치 확인이 거른다
+					a.logf("%s 삭제 전에 없던 호스트 %d대가 인벤토리에 있습니다: %s — 등록 뒤 완전일치 확인에서 다시 걸러집니다", markWarn, len(after), strings.Join(sortedNames(after), " "))
+				}
+				pass(len(after))
+				return nil
+			}
+			if len(left) < prevLeft {
+				prevLeft, lastProgress = len(left), nowFn()
+				a.logf("%s 인벤토리 삭제 진행 중: 삭제 전 %d대 중 %d대 남음", markInfo, len(before), len(left))
 			}
 		}
-		if !same {
-			left := strings.Join(sortedNames(after), " ")
-			a.logf("%s 인벤토리 삭제 뒤에도 %d대가 남아 있습니다(삭제 전 %d대): %s — 등록 뒤 완전일치 확인에서 다시 걸러집니다", markWarn, len(after), len(before), left)
-			appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete_check status=warn before=%d after=%d left=%q", a.user, len(before), len(after), left))
-			a.emitDeleteCheck(len(before), len(after))
-			return nil
+		now := nowFn()
+		stalled, overdue := now.Sub(lastProgress) >= deleteStallWait, now.Sub(start) >= deleteMaxWait
+		if !stalled && !overdue {
+			sleepFn(interval)
+			continue
 		}
-		if nowFn().Sub(start) >= deleteCheckWait {
-			names := strings.Join(sortedNames(after), " ")
-			appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete_check status=fail before=%d after=%d hosts=%q", a.user, len(before), len(after), names))
-			return fmt.Errorf("인벤토리가 삭제되지 않았습니다 — 삭제 스크립트(ssh %s \"%s\")는 끝났지만 %d초 뒤에도 삭제 전과 같은 %d대가 남아 있습니다: %s",
-				host, remote, int(deleteCheckWait/time.Second), len(after), names)
+		if lastErr != nil {
+			return unverified("삭제 뒤", lastErr)
 		}
-		sleepFn(interval)
+		names := strings.Join(sortedNames(left), " ")
+		appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete_check status=fail before=%d after=%d hosts=%q", a.user, len(before), len(left), names))
+		why := fmt.Sprintf("%d초 동안 더 줄지 않았습니다", int(deleteStallWait/time.Second))
+		if !stalled {
+			why = fmt.Sprintf("최대 대기 %d분이 지났습니다", int(deleteMaxWait/time.Minute))
+		}
+		if len(left) == len(before) {
+			return fmt.Errorf("인벤토리가 삭제되지 않았습니다 — 삭제 스크립트(ssh %s \"%s\")는 끝났지만 삭제 전과 같은 %d대가 남아 있습니다(%s): %s",
+				host, remote, len(left), why, names)
+		}
+		return fmt.Errorf("인벤토리 삭제가 끝나지 않았습니다 — 삭제 전 %d대 중 %d대가 남아 있습니다(%s): %s", len(before), len(left), why, names)
 	}
 }
 
@@ -263,27 +289,50 @@ func (a *app) register(yamlName string, list []*target) (string, error) {
 		return "", fmt.Errorf("invsync 실패: %v", err)
 	}
 	a.logf("%s 인벤토리 동기화 완료: %s", markOK, yml)
-	// new_setup -auto 가 읽는 줄: 방금 등록한 yml 과 그 직후의 인벤토리 호스트(launch 직전 변경 감시의 기준값)
-	var seen []string
-	st, err := a.client.yamlState(cfg)
-	if err != nil {
-		a.logf("%s 등록 직후 인벤토리 호스트를 읽지 못했습니다(변경 감시 기준에서 호스트 제외): %v", markWarn, err)
-	} else {
-		seen = st.Hosts
-		if seen == nil {
-			seen = []string{}
-		}
-	}
-	a.logf("%s", registeredLine(yml, seen))
-	// 안전장치: 인벤토리 호스트가 이번 묶음 대상과 완전히 같아야 launch 한다 (inventory_match_exclude 호스트는 비교에서 뺌)
-	if err != nil {
-		return "", fmt.Errorf("인벤토리 완전일치 확인 불가 (호스트 조회 실패): %v", err)
-	}
+	// 안전장치: 인벤토리 호스트가 이번 묶음 대상과 완전히 같아야 launch 한다 (inventory_match_exclude 호스트는 비교에서 뺌).
+	// 반영이 늦을 수 있으므로(삭제·동기화 직후) 어긋나면 poll_interval 간격으로 matchRetries 번 다시 조회한 뒤 판정한다.
 	want := make([]string, len(list))
 	for i, t := range list {
 		want[i] = t.Host
 	}
-	if extra, missing := inventoryDiff(seen, want, cfg.InventoryMatchExclude); len(extra)+len(missing) > 0 {
+	interval := a.pollInterval()
+	if interval <= 0 {
+		interval = time.Second
+	}
+	var seen, extra, missing []string
+	var err error
+	for try := 0; ; try++ {
+		var st yamlState
+		if st, err = a.client.yamlState(cfg); err == nil {
+			seen = st.Hosts
+			if seen == nil {
+				seen = []string{}
+			}
+			if extra, missing = inventoryDiff(seen, want, cfg.InventoryMatchExclude); len(extra)+len(missing) == 0 {
+				break
+			}
+		}
+		if try == matchRetries {
+			break
+		}
+		if err != nil {
+			a.logf("%s 등록 직후 인벤토리 호스트 조회 실패(다시 조회합니다): %v", markWarn, err)
+		} else {
+			a.logf("%s 인벤토리가 아직 대상과 다릅니다(인벤토리에만 있음 %d대, 인벤토리에 없음 %d대) — 다시 확인합니다", markWarn, len(extra), len(missing))
+		}
+		sleepFn(interval)
+	}
+	// new_setup -auto 가 읽는 줄: 방금 등록한 yml 과 그 직후의 인벤토리 호스트(launch 직전 변경 감시의 기준값).
+	// 완전일치가 확인되지 않았으면 호스트는 싣지 않는다(지우는 중이던 옛 호스트 등이 기준값으로 남지 않게).
+	if err != nil || len(extra)+len(missing) > 0 {
+		a.logf("%s", registeredLine(yml, nil))
+	} else {
+		a.logf("%s", registeredLine(yml, seen))
+	}
+	if err != nil {
+		return "", fmt.Errorf("인벤토리 완전일치 확인 불가 (호스트 조회 실패): %v", err)
+	}
+	if len(extra)+len(missing) > 0 {
 		return "", fmt.Errorf("인벤토리가 대상과 완전히 일치하지 않습니다 — 인벤토리에만 있음 %d대 [%s], 인벤토리에 없음 %d대 [%s]",
 			len(extra), strings.Join(extra, " "), len(missing), strings.Join(missing, " "))
 	}

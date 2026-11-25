@@ -44,30 +44,46 @@ type yamlState struct {
 }
 
 // inventoryHosts 는 인벤토리의 호스트 이름 목록(정렬)이다. next 페이지를 끝까지 따라간다.
+// 페이지를 읽는 사이에 호스트가 지워지거나 들어오면(대량 삭제 중) 페이지가 밀려 일부를 건너뛰거나 겹쳐 읽으므로,
+// 읽은 개수가 첫 페이지의 count 와 다르면 hostReadTries 번까지 처음부터 다시 읽는다(그래도 다르면 마지막에 읽은 것).
 func (c *awxClient) inventoryHosts(invID int) ([]string, error) {
 	var names []string
-	path := fmt.Sprintf("/api/v2/inventories/%d/hosts/?page_size=200", invID)
-	for path != "" {
-		var l struct {
-			Next    string `json:"next"`
-			Results []struct {
-				Name string `json:"name"`
-			} `json:"results"`
+	for try := 1; ; try++ {
+		names = nil
+		count := -1
+		path := fmt.Sprintf("/api/v2/inventories/%d/hosts/?page_size=200", invID)
+		for path != "" {
+			var l struct {
+				Count   *int   `json:"count"`
+				Next    string `json:"next"`
+				Results []struct {
+					Name string `json:"name"`
+				} `json:"results"`
+			}
+			if err := c.do(http.MethodGet, path, nil, &l); err != nil {
+				return nil, fmt.Errorf("인벤토리(%d)의 호스트 조회 실패: %w", invID, err)
+			}
+			if count < 0 && l.Count != nil {
+				count = *l.Count
+			}
+			for _, r := range l.Results {
+				names = append(names, r.Name)
+			}
+			path = ""
+			if strings.HasPrefix(l.Next, "/") {
+				path = l.Next
+			}
 		}
-		if err := c.do(http.MethodGet, path, nil, &l); err != nil {
-			return nil, fmt.Errorf("인벤토리(%d)의 호스트 조회 실패: %w", invID, err)
-		}
-		for _, r := range l.Results {
-			names = append(names, r.Name)
-		}
-		path = ""
-		if strings.HasPrefix(l.Next, "/") {
-			path = l.Next
+		if count < 0 || count == len(names) || try >= hostReadTries {
+			break
 		}
 	}
 	sort.Strings(names)
 	return names, nil
 }
+
+// hostReadTries 는 inventoryHosts 가 count 와 읽은 개수가 맞을 때까지 다시 읽는 최대 횟수.
+const hostReadTries = 3
 
 // yamlState 는 invsync 가 쓰는 인벤토리 소스(inventorySourceID)의 yml 과 그 인벤토리의 호스트 이름을 읽는다.
 func (c *awxClient) yamlState(cfg *Config) (yamlState, error) {
