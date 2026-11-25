@@ -256,6 +256,9 @@ type tuiState struct {
 	quitAfter   bool             // 직접 실행 중 입력 끝(EOF)·시그널 → 끝나면 종료
 	restore     func()           // 현재 raw 모드를 되돌리는 함수 (AWX 실행 후 raw 재진입 때 교체됨)
 	inMu        sync.Mutex       // 키 읽기 goroutine 이 poll+Read 하는 동안 잡고 있음 — AWX 실행 중 Lock 으로 멈춘다
+	snapMu      sync.Mutex       // Snapshot 호출을 하나씩만 (자동 갱신 goroutine 과 r 키 등 즉시 갱신이 겹치지 않게)
+	snapGen     int              // 즉시 갱신 횟수 — 자동 갱신이 시작된 뒤 즉시 갱신이 있었으면 늦게 온 자동 갱신 결과는 버린다
+	snapCh      chan snapResult  // 백그라운드 자동 갱신 결과, nil = 받아오는 중 아님
 }
 
 // runTUILoop: raw 모드 진입 → 그리기·키·tick 루프 → (정상·패닉·시그널 어느 경로든) 화면·termios 복원
@@ -344,9 +347,32 @@ func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) in
 		}
 		return st.oneShot && st.nh == nil && st.awx == nil && st.oo == nil && st.wk == nil
 	}
+	var carry *keyEv // 이동 키를 모아 처리하다 꺼낸 다른 키 — 이번 화면을 그린 뒤 다음 반복에서 먼저 처리 (순서 유지)
 	for {
-		select {
-		case ev := <-keys:
+		ev, isKey := keyEv{}, false
+		if carry != nil {
+			ev, isKey, carry = *carry, true, nil
+		} else {
+			select {
+			case ev = <-keys:
+				isKey = true
+			case <-tick: // 스냅샷(/proc·작업 JSON, os6_mgmt 는 gossh)은 백그라운드로 받아 키 입력이 멈추지 않게 한다
+				st.refreshAsync()
+			case r := <-st.snapCh:
+				st.applySnap(r)
+			case <-st.fastTick:
+			case <-st.os6Tick():
+			case <-st.os6Wake():
+			case <-env.Resize: // 터미널이 이전 프레임을 reflow 한 채로 남지 않게 지우고 새 폭으로 바로 다시 그림
+				io.WriteString(env.Out, "\x1b[2J")
+			case <-env.Signals:
+				if st.o6 == nil {
+					return 0
+				}
+				st.sel.Msg, st.quitAfter = os6BusyMsg+" (끝나면 종료합니다)", true
+			}
+		}
+		if isKey {
 			if key(ev) {
 				return 0
 			}
@@ -362,18 +388,22 @@ func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) in
 					more = false
 				}
 			}
-		case <-tick:
-			st.refresh()
-		case <-st.fastTick:
-		case <-st.os6Tick():
-		case <-st.os6Wake():
-		case <-env.Resize: // 터미널이 이전 프레임을 reflow 한 채로 남지 않게 지우고 새 폭으로 바로 다시 그림
-			io.WriteString(env.Out, "\x1b[2J")
-		case <-env.Signals:
-			if st.o6 == nil {
-				return 0
+			// ↑↓·PgUp/PgDn 을 누르고 있으면: 이미 쌓인 이동 키는 모두 처리한 뒤 한 번만 그린다.
+			// 키 반복이 그리기보다 빠르면 키가 채널에 밀려 손을 뗀 뒤에도 커서가 계속 움직이는 렉이 생긴다.
+			// 이동 키가 아닌 키를 만나면 이번 화면을 그린 뒤 처리한다 (이동 키 사이의 중간 화면만 건너뜀).
+			// 화면 1·2 목록에서만 — 결과 보기 등은 스크롤 위치를 그릴 때 보정하므로 키마다 그려야 한다
+			for more := isMoveKey(ev) && st.listScreen(); more; {
+				select {
+				case nx := <-keys:
+					if !isMoveKey(nx) {
+						carry, more = &nx, false
+					} else if key(nx) {
+						return 0
+					}
+				default:
+					more = false
+				}
 			}
-			st.sel.Msg, st.quitAfter = os6BusyMsg+" (끝나면 종료합니다)", true
 		}
 		st.pollOneoff()
 		st.pollChange()
@@ -391,8 +421,71 @@ func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) in
 	}
 }
 
+// isMoveKey: 누르고 있으면 반복 입력되는 목록 이동 키 (↑↓·PgUp/PgDn) — 쌓인 것은 한 번에 처리하고 한 번만 그린다
+func isMoveKey(ev keyEv) bool {
+	return ev.k == kUp || ev.k == kDown || ev.k == kPgUp || ev.k == kPgDn
+}
+
+// listScreen: 화면 1·2 목록만 보이는 상태 (다른 화면·메뉴·프롬프트 없음) — 이동 키가 키 처리에서 바로 위치를 보정하는 곳
+func (st *tuiState) listScreen() bool {
+	return st.nh == nil && st.wk == nil && st.chg == nil && st.chgMenu == nil && st.menu == nil && st.done == nil &&
+		st.awx == nil && st.oo == nil && st.view == nil && !st.help && !st.sel.Confirm && !st.sel.Release
+}
+
 func (st *tuiState) refresh() {
-	s, err := st.src.Snapshot()
+	s, err := st.snapshot()
+	st.setSnap(s, err)
+}
+
+// snapshot: 스냅샷을 지금 받아온다 (진행 중인 자동 갱신이 있으면 끝날 때까지 기다림).
+// 세대를 올려 그 자동 갱신의 (더 오래된) 결과가 이 결과를 덮지 않게 한다
+func (st *tuiState) snapshot() (Snapshot, error) {
+	st.snapGen++
+	st.snapMu.Lock()
+	defer st.snapMu.Unlock()
+	return st.src.Snapshot()
+}
+
+type snapResult struct {
+	s     Snapshot
+	err   error
+	gen   int
+	panic interface{} // Snapshot 패닉 — 메인 루프에서 다시 일으켜 화면·termios 를 복원하고 끝낸다
+}
+
+// refreshAsync: 자동 갱신 — 스냅샷을 goroutine 에서 받아 snapCh 로 넘긴다. 이전 갱신이 아직 안 끝났으면 이번 tick 은 건너뜀
+func (st *tuiState) refreshAsync() {
+	if st.snapCh != nil {
+		return
+	}
+	ch := make(chan snapResult, 1)
+	st.snapCh = ch
+	src, gen := st.src, st.snapGen
+	go func() {
+		r := snapResult{gen: gen}
+		defer func() {
+			r.panic = recover()
+			ch <- r
+		}()
+		st.snapMu.Lock()
+		defer st.snapMu.Unlock()
+		r.s, r.err = src.Snapshot()
+	}()
+}
+
+// applySnap: 자동 갱신 결과 반영 (그 사이 즉시 갱신이 있었으면 버림)
+func (st *tuiState) applySnap(r snapResult) {
+	st.snapCh = nil
+	if r.panic != nil {
+		panic(r.panic)
+	}
+	if r.gen == st.snapGen {
+		st.setSnap(r.s, r.err)
+	}
+}
+
+// setSnap: 받아온 스냅샷·오류를 화면 상태에 반영
+func (st *tuiState) setSnap(s Snapshot, err error) {
 	var ce *snapCachedErr
 	if errors.As(err, &ce) { // os8_mgmt 접속 불가 — os6 에 저장된 스냅샷을 쓰고 안내 줄에 그 사실을 표시
 		st.snap, st.err = s, ce.Error()

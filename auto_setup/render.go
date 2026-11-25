@@ -930,6 +930,12 @@ func noteStyle(h SnapHost) string {
 // hostTable: 호스트표 — 머리 줄, 행 목록(행 하나 = 블록 하나, 좁으면 여러 줄), 커서 행 번호(host<0 이면 커서 없음).
 // 칸보다 긴 호스트명·그룹·단계는 칸 안에서 줄바꿈, 비고는 칸이 noteMin 이상이면 칸 안에서, 아니면 행 아래 줄(들여쓰기)로.
 func hostTable(hosts []SnapHost, host int, now int64, width int, color bool) (string, [][]string, int) {
+	return hostTableRange(hosts, host, now, width, color, 0, len(hosts))
+}
+
+// hostTableRange: hostTable 과 같되 행은 hosts[lo:hi] 만 만든다. 열 폭은 전체 호스트 기준(보이는 범위가 바뀌어도 열이 흔들리지 않게),
+// 커서 행 번호는 만든 행 기준.
+func hostTableRange(hosts []SnapHost, host int, now int64, width int, color bool, lo, hi int) (string, [][]string, int) {
 	hostW := 8
 	for _, h := range hosts {
 		hostW = rMax(hostW, rMin(strWidth(cleanText(h.Host)), 28))
@@ -970,7 +976,8 @@ func hostTable(hosts []SnapHost, host int, now int64, width int, color bool) (st
 		padL("경과", elapsedW) + "  " + noteHdr, stBold})
 	var rows [][]string
 	cursor := 0
-	for i, h := range hosts {
+	for i := lo; i < hi; i++ {
+		h := hosts[i]
 		el := "-"
 		if h.Elapsed > 0 && h.Stage != StageDone {
 			el = fmtDur(h.Elapsed)
@@ -1064,7 +1071,13 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 		}
 	} else {
 		var hdr string
-		hdr, body, cursor = hostTable(hosts, sel.Host, s.Now, width, color)
+		// 화면에 들어갈 수 있는 행만 만든다: 행은 한 줄 이상이라 커서에서 height 행 넘게 떨어진 행은 window 에 들어가지 않는다
+		// (수천 대 그룹·전체 보기에서 ↑↓ 한 번마다 모든 호스트 행을 다시 만들던 렉. 그려지는 화면은 전과 같다)
+		lo, hi := 0, len(hosts)
+		if height > 0 && sel.Host >= 0 && sel.Host < len(hosts) {
+			lo, hi = rMax(sel.Host-height, 0), rMin(sel.Host+height+1, len(hosts))
+		}
+		hdr, body, cursor = hostTableRange(hosts, sel.Host, s.Now, width, color, lo, hi)
 		head = append(head, hdr)
 	}
 
