@@ -23,6 +23,7 @@ type fakeHost struct {
 	dcgmOut   string   // DCGM 설치 스크립트 출력 (비우면 repo 복구 표식만)
 	startOut  string   // nvidia-dcgm 기동·확인 출력 (비우면 정상 상태)
 	depOut    []string // rpm -U --test 출력, 호출마다 하나씩 (다 쓰면 부족분 없음)
+	rcLocal   int      // /etc/rc.local 종료코드
 }
 
 // goodDcgm 은 major 기준 정상인 dcgmStateScript 출력이다.
@@ -41,6 +42,8 @@ func (f *fakeHost) use(t *testing.T) {
 	remoteRun = func(cfg *Config, host, script string, timeout time.Duration) (string, int, error) {
 		f.scripts = append(f.scripts, script)
 		switch {
+		case script == rcLocalScript:
+			return "rc.local out", f.rcLocal, nil
 		case script == dcgmStartScript:
 			if f.startOut != "" {
 				return f.startOut, 0, nil
@@ -107,6 +110,8 @@ func (f *fakeHost) kinds() []string {
 			k = append(k, "verify")
 		case s == dcgmStartScript:
 			k = append(k, "dcgm-start")
+		case s == rcLocalScript:
+			k = append(k, "rc.local")
 		case strings.Contains(s, "dnf install"):
 			k = append(k, "dcgm-mount")
 		case strings.Contains(s, "dnf localinstall"):
@@ -137,7 +142,7 @@ func TestInstallMountOK(t *testing.T) {
 	if tg.Fail != "" || tg.NewDriver != "550.54.14" || tg.NewCUDA != "12.4" {
 		t.Fatalf("%+v", tg)
 	}
-	if got := f.kinds(); !reflect.DeepEqual(got, []string{mountRun, "verify", "dcgm-mount", "dcgm-start"}) {
+	if got := f.kinds(); !reflect.DeepEqual(got, []string{mountRun, "verify", "dcgm-mount", "dcgm-start", "rc.local"}) {
 		t.Errorf("%q", got)
 	}
 	b, _ := os.ReadFile(filepath.Join(cfg.LogDir, "gpu01.log"))
@@ -157,7 +162,7 @@ func TestInstallScpRetry(t *testing.T) {
 		t.Fatalf("%+v", tg)
 	}
 	tmpRun := "sh '/tmp/gpu_install/NVIDIA-Linux-x86_64-550.54.14.run' -s"
-	want := []string{"mkdir", tmpRun, "unload", tmpRun, "rm -f '/tmp/gpu_install/NVIDIA-Linux-x86_64-550.54.14.run'", "verify"}
+	want := []string{"mkdir", tmpRun, "unload", tmpRun, "rm -f '/tmp/gpu_install/NVIDIA-Linux-x86_64-550.54.14.run'", "verify", "rc.local"}
 	if got := f.kinds(); !reflect.DeepEqual(got, want) {
 		t.Errorf("%q", got)
 	}
@@ -201,7 +206,7 @@ func TestInstallPrecheck(t *testing.T) {
 		{"kernel-devel 없음", func(s *HostStatus) { s.KernelDevel = false }, 0, "", "no kernel-devel", nil},
 		{"둘 다 없음", func(s *HostStatus) { s.KernelDevel, s.GCC = false, false }, 0, "", "no kernel-devel, no gcc", nil},
 		{"nouveau 언로드 실패", func(s *HostStatus) { s.Nouveau = true }, 1, "", "nouveau unload failed", []string{"nouveau"}},
-		{"nouveau 언로드 후 진행", func(s *HostStatus) { s.Nouveau = true }, 0, "", "", []string{"nouveau", mountRun, "verify", "dcgm-mount", "dcgm-start"}},
+		{"nouveau 언로드 후 진행", func(s *HostStatus) { s.Nouveau = true }, 0, "", "", []string{"nouveau", mountRun, "verify", "dcgm-mount", "dcgm-start", "rc.local"}},
 	}
 	for _, c := range cases {
 		f := &fakeHost{installRC: []int{0}, driver: "550.54.14", nouveauRC: c.nouveauRC}
@@ -305,5 +310,36 @@ func TestWriteFailLists(t *testing.T) {
 	}
 	if _, err := os.Stat(failListFile); err == nil {
 		t.Error("fail_list 가 생기면 안 됨")
+	}
+}
+
+func TestInstallRcLocal(t *testing.T) {
+	cases := []struct {
+		name string
+		rc   int
+		fail string
+	}{
+		{"성공", 0, ""},
+		{"실패", 3, "rc.local failed(rc=3)"},
+		{"10분 초과", 124, "rc.local failed(rc=124)"},
+	}
+	for _, c := range cases {
+		f := &fakeHost{installRC: []int{0}, driver: "550.54.14", rcLocal: c.rc}
+		f.use(t)
+		tg := newTarget(methodMount, okStatus())
+		installHost(&Config{AutofsPath: "/auto"}, tg)
+		if tg.Fail != c.fail {
+			t.Errorf("%s: fail=%q, want %q", c.name, tg.Fail, c.fail)
+		}
+	}
+	// DCGM 이 실패하면 rc.local 은 실행하지 않는다
+	f := &fakeHost{installRC: []int{0}, driver: "550.54.14", dcgmRC: 1}
+	f.use(t)
+	tg := newTarget(methodMount, okStatus())
+	installHost(&Config{AutofsPath: "/auto"}, tg)
+	for _, k := range f.kinds() {
+		if k == "rc.local" {
+			t.Errorf("DCGM 실패인데 rc.local 실행: %q", f.kinds())
+		}
 	}
 }

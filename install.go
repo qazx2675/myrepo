@@ -292,4 +292,37 @@ func installHost(cfg *Config, t *Target) {
 	}
 	l.say("드라이버 %s 설치 완료 (CUDA %s)", t.NewDriver, dash(t.NewCUDA))
 	installDCGM(cfg, t, l)
+	if t.Fail == "" {
+		runRcLocal(cfg, t, l)
+	}
+}
+
+// rcLocalScript 는 설치가 끝난 서버에서 /etc/rc.local 을 실행한다(최대 10분).
+// 없으면 건너뛰고, 실행 권한이 없으면 bash 로 실행한다. rc.local 이 띄운 데몬이 출력을 붙잡아
+// gossh 가 끝나지 않는 일이 없게 출력은 임시 파일로 받아 끝난 뒤 보여 준다.
+const rcLocalScript = `(
+if [ ! -e /etc/rc.local ]; then echo GI_RCLOCAL=none; exit 0; fi
+log=$(mktemp /tmp/gpu_install_rclocal.XXXXXX) || exit 1
+if [ -x /etc/rc.local ]; then
+  timeout 600 /etc/rc.local </dev/null >"$log" 2>&1
+else
+  timeout 600 bash /etc/rc.local </dev/null >"$log" 2>&1
+fi
+rc=$?
+cat "$log"; rm -f "$log"
+exit $rc
+)`
+
+// runRcLocal 은 드라이버·DCGM 설치에 성공한 서버에서 /etc/rc.local 을 실행한다. 실패하면 t.Fail 을 채운다.
+func runRcLocal(cfg *Config, t *Target, l *hostLog) {
+	out, rc := l.run(cfg, "rc.local 실행", rcLocalScript, 11*time.Minute)
+	switch {
+	case strings.Contains(out, "GI_RCLOCAL=none"):
+		l.say("/etc/rc.local 이 없어 건너뜁니다")
+	case rc != 0:
+		t.Fail = fmt.Sprintf("rc.local failed(rc=%d)", rc)
+		l.say("fail: /etc/rc.local 실행 실패(종료코드 %d, 124 는 10분 초과). 출력은 호스트 로그를 보세요", rc)
+	default:
+		l.say("/etc/rc.local 실행 완료")
+	}
 }
