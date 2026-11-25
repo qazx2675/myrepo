@@ -54,6 +54,8 @@ vi worklist.txt
 bash raid0.sh [옵션]
 ```
 
+> **권한 안내**: 내부 워커(`lib/ilo_worker.sh`)도 `bash`로 직접 실행되므로, 파일을 복사하면서 실행 권한(`+x`)이 빠진 상태에서도 `bash raid0.sh`로 바로 실행할 수 있습니다. (`chmod +x raid0.sh lib/ilo_worker.sh`는 선택 사항입니다.)
+
 | 옵션 | 설명 | 기본값 |
 |---|---|---|
 | `-w, --worklist FILE` | 대상 iLO IP 목록 파일 경로 | `./worklist.txt` |

@@ -263,7 +263,7 @@ export ILO_USER ILO_PASS RUN_TMP_DIR LOG_DIR PYTHON_BIN SCRIPT_DIR DRY_RUN
 # ------------------------------------------------------------------------------
 echo ""
 echo "[1/4] 대상 서버(${TOTAL_IPS}대) Redfish 하드웨어/디스크 정보 병렬 조회 중..."
-pdsh -R exec -f "$FANOUT" -w "^${CLEAN_WORKLIST}" "$WORKER" discover %h > "${LOG_DIR}/pdsh_discover.log" 2>&1 || true
+pdsh -R exec -f "$FANOUT" -w "^${CLEAN_WORKLIST}" bash "$WORKER" discover %h > "${LOG_DIR}/pdsh_discover.log" 2>&1 || true
 
 SUM_JSON="${RUN_TMP_DIR}/summary.json"
 "$PYTHON_BIN" "$PARSER" summarize "$RUN_TMP_DIR" --format json > "$SUM_JSON" 2>/dev/null || true
@@ -576,7 +576,7 @@ tr -d '\r' < "$READY_IPS_FILE" > "$APPLY_WORKLIST"
 
 echo ""
 echo "[적용 중] ${READY_COUNT}대 서버에 병렬 RAID 구성 적용 중..."
-pdsh -R exec -f "$FANOUT" -w "^${APPLY_WORKLIST}" "$WORKER" apply %h > "${LOG_DIR}/pdsh_apply.log" 2>&1 || true
+pdsh -R exec -f "$FANOUT" -w "^${APPLY_WORKLIST}" bash "$WORKER" apply %h > "${LOG_DIR}/pdsh_apply.log" 2>&1 || true
 
 # ------------------------------------------------------------------------------
 # Step 4: Summary, Logs & Selective Reboot
@@ -606,7 +606,7 @@ if [ -s "$REBOOT_LIST" ]; then
         REBOOT_CNT=$(wc -l < "$REBOOT_LIST" | tr -d '[:space:]')
         echo ""
         echo "[재부팅 실행] ${REBOOT_CNT}대 서버에 일괄 재부팅 명령 전송 중..."
-        pdsh -R exec -f "$FANOUT" -w "^${REBOOT_LIST}" "$WORKER" reboot %h > "${LOG_DIR}/pdsh_reboot.log" 2>&1 || true
+        pdsh -R exec -f "$FANOUT" -w "^${REBOOT_LIST}" bash "$WORKER" reboot %h > "${LOG_DIR}/pdsh_reboot.log" 2>&1 || true
 
         mkdir -p "${RUN_TMP_DIR}/reboot_results"
         "$PYTHON_BIN" -c '# -*- coding: utf-8 -*-

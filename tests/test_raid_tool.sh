@@ -635,6 +635,12 @@ for host in "${HOST_LIST[@]}"; do
         for tok in "${CMD_TEMPLATE[@]}"; do
             ARGS+=("${tok//%h/$host}")
         done
+        case "${ARGS[0]}" in
+            *.sh)
+                echo "mock pdsh: ${ARGS[0]} failed: Permission denied (must invoke via bash)" >&2
+                exit 126
+                ;;
+        esac
         "${ARGS[@]}" 2>&1 | while IFS= read -r out_line; do
             printf '%s: %s\n' "$host" "$out_line"
         done
@@ -1116,6 +1122,24 @@ else:
 PYEOF
 )"
 assert_eq "$PEP263_CHECK" "OK" "PEP-263 UTF-8 coding header check on inline python -c blocks"
+
+# 1f. Verify all pdsh -R exec worker calls in raid0.sh invoke via `bash` (no +x required on ilo_worker.sh)
+PDSH_BASH_CHECK="$("$PYTHON_BIN" - "$(to_py_path "$ILO_DIR/raid0.sh")" <<'PYEOF'
+import re, sys
+with open(sys.argv[1], "rb") as fh:
+    content = fh.read().decode("utf-8", "replace")
+pdsh_lines = [ln.strip() for ln in content.splitlines() if re.search(r'\bpdsh\s+-R\s+exec\b', ln) and not ln.strip().startswith("#")]
+if len(pdsh_lines) < 3:
+    print("FAIL: expected >=3 pdsh -R exec lines (discover/apply/reboot), found %d" % len(pdsh_lines))
+    sys.exit(0)
+bad = [ln for ln in pdsh_lines if not re.search(r'\bbash\s+"\$WORKER', ln)]
+if bad:
+    print("FAIL: pdsh calls without bash prefix: " + " | ".join(bad))
+else:
+    print("OK")
+PYEOF
+)"
+assert_eq "$PDSH_BASH_CHECK" "OK" "All pdsh -R exec calls in raid0.sh invoke worker via bash (no +x bit required)"
 
 # ===========================================================================
 # 2. Gen10 SmartStorageConfig Tests (10.10.0.1)
