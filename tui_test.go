@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -394,6 +395,9 @@ func TestAutoRefreshTickAndInterval(t *testing.T) {
 			r.ticks = append(r.ticks, d)
 			return tick, func() {}
 		}
+		out := &waitWriter{want: "진행 중인 작업 없음", hit: make(chan struct{})}
+		env.Out = out
+		hit := out.hit
 		src := &fakeSrc{local: local}
 		src.nextSnap = func(n int) Snapshot {
 			if n == 1 {
@@ -404,6 +408,11 @@ func TestAutoRefreshTickAndInterval(t *testing.T) {
 		done := make(chan int)
 		go func() { done <- runTUILoop(src, env) }()
 		tick <- time.Time{}
+		select { // 자동 갱신은 백그라운드 — 결과가 그려질 때까지 기다린 뒤 종료
+		case <-hit:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("local=%v tick 갱신 결과가 그려지지 않음", local)
+		}
 		pw.Write([]byte("q"))
 		if code := <-done; code != 0 {
 			t.Fatalf("exit=%d", code)
@@ -416,10 +425,95 @@ func TestAutoRefreshTickAndInterval(t *testing.T) {
 		if len(r.ticks) != 1 || r.ticks[0] != want {
 			t.Errorf("local=%v 갱신 주기 %v want %v", local, r.ticks, want)
 		}
-		if src.calls != 2 || !strings.Contains(r.out.String(), "진행 중인 작업 없음") {
+		if src.calls != 2 || !strings.Contains(out.String(), "진행 중인 작업 없음") {
 			t.Errorf("tick 갱신: calls=%d", src.calls)
 		}
+		r.out.WriteString(out.String()) // assertRestored 는 r.out 에서 화면 진입·복원 시퀀스를 본다
 		assertRestored(t, r)
+	}
+}
+
+// waitWriter: 여러 goroutine 이 써도 안전한 출력 — want 가 처음 나오면 hit 을 닫는다
+type waitWriter struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	want string
+	hit  chan struct{}
+}
+
+func (w *waitWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buf.Write(p)
+	if w.hit != nil && strings.Contains(w.buf.String(), w.want) {
+		close(w.hit)
+		w.hit = nil
+	}
+	return n, err
+}
+
+func (w *waitWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+// 자동 갱신 스냅샷이 오래 걸려도 (os6_mgmt gossh 지연·os8 접속 불가) 키 입력은 바로 처리되어야 한다
+func TestAutoRefreshDoesNotBlockKeys(t *testing.T) {
+	pr, pw := io.Pipe()
+	env, _ := newRig(pr)
+	env.Out = &waitWriter{}
+	tick := make(chan time.Time)
+	env.Tick = func(time.Duration) (<-chan time.Time, func()) { return tick, func() {} }
+	release := make(chan struct{})
+	defer close(release)
+	src := &fakeSrc{local: false}
+	src.nextSnap = func(n int) Snapshot {
+		if n > 1 {
+			<-release // 두 번째(자동 갱신) 스냅샷은 테스트가 끝날 때까지 막힘
+		}
+		return twoGroupSnap()
+	}
+	done := make(chan int)
+	go func() { done <- runTUILoop(src, env) }()
+	tick <- time.Time{}
+	tick <- time.Time{} // 이전 갱신이 안 끝났으면 건너뛰어야 함 (막히지 않음)
+	pw.Write([]byte("\x1b[B\x1b[Aq")) // ↓↑ 후 종료
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("exit=%d", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("자동 갱신 스냅샷이 끝나지 않으면 키 입력(q)이 처리되지 않음 — 갱신이 UI 루프를 막고 있음")
+	}
+	pw.Close()
+}
+
+// 자동 갱신 중 패닉도 메인 루프로 전파되어 화면·termios 를 복원해야 한다
+func TestRestoreOnAutoRefreshPanic(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	env, r := newRig(pr)
+	tick := make(chan time.Time)
+	env.Tick = func(time.Duration) (<-chan time.Time, func()) { return tick, func() {} }
+	src := &fakeSrc{snap: twoGroupSnap(), local: true, panicOn: 2}
+	done := make(chan interface{})
+	go func() {
+		defer func() { done <- recover() }()
+		runTUILoop(src, env)
+	}()
+	tick <- time.Time{}
+	select {
+	case p := <-done:
+		if p == nil {
+			t.Error("패닉이 전파되어야 함")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("자동 갱신 패닉 후 루프가 끝나지 않음")
+	}
+	if r.raws != 1 || r.restored != 1 || !strings.HasSuffix(r.out.String(), leaveScreen) {
+		t.Errorf("패닉 후 복원: raw=%d restored=%d", r.raws, r.restored)
 	}
 }
 

@@ -160,7 +160,7 @@ func (st *tuiState) startOS6Run() {
 		st.sel.Msg = "[X] os_check_sh(또는 os6_os_check_sh) 가 비어 있어 os6_mgmt 에서 실행할 수 없습니다"
 		return
 	}
-	s, err := st.src.Snapshot() // 겹침 판단은 최신 스냅샷으로 (os8_mgmt 접속 불가면 판단 생략 — 잠금으로 os8 이 건너뜀)
+	s, err := st.snapshot() // 겹침 판단은 최신 스냅샷으로 (os8_mgmt 접속 불가면 판단 생략 — 잠금으로 os8 이 건너뜀)
 	var ce *snapCachedErr
 	live := err == nil
 	if live || errors.As(err, &ce) {
