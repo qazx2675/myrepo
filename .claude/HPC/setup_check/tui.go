@@ -264,7 +264,7 @@ func handleKey(v *viewState, st *runState, alive bool, key string, w, h int, now
 		case "end":
 			v.Scroll = 1 << 30
 		}
-		maxScroll := len(visibleRows(st, v.OnlyBad)) - capRows
+		maxScroll := visibleCount(st, v.OnlyBad) - capRows
 		if v.Scroll > maxScroll {
 			v.Scroll = maxScroll
 		}
@@ -644,26 +644,62 @@ func runTUI(dir string) error {
 	var cache stateCache
 	var flashAt time.Time
 	alive := false
-	refresh := func() {
+	// load 는 상태·워커 생존·로그 끝을 읽는다. 대수가 많으면 state.json 파싱에 수십 ms 가 걸리므로 틱에서는 goroutine 으로 돌려
+	// 그동안에도 키를 처리한다(한 번에 하나만 돌리므로 cache 는 그 goroutine 만 만진다).
+	type loaded struct {
+		st    *runState
+		alive bool
+		logs  []string
+	}
+	load := func() loaded {
+		var r loaded
 		if s, err := cache.load(dir); err == nil {
-			st = s
+			r.st = s
 		}
-		alive = workerAlive(dir)
+		r.alive = workerAlive(dir)
+		r.logs = tailLines(filepath.Join(dir, workerLog), maxLogLines)
+		return r
+	}
+	apply := func(r loaded) {
+		if r.st != nil {
+			st = r.st
+		}
+		alive = r.alive
 		view.sync(st, time.Now()) // 새 질문이면 입력 칸 기본값을 채우고, 답을 보낸 질문이 바뀌었으면 기록을 푼다
 		if view.NoLog {
 			view.LogLines = nil
 		} else {
-			view.LogLines = tailLines(filepath.Join(dir, workerLog), maxLogLines)
+			view.LogLines = r.logs
 		}
 	}
+	// 화면에는 지난번과 달라진 줄만 보낸다(ssh 너머에서 키마다 화면 전체를 보내면 출력이 밀려 스크롤이 늦게 따라온다).
+	// shown 이 nil 이거나 크기가 바뀌면 화면을 지우고 전부 그린다.
+	var shown []string
+	shownW := 0
 	draw := func() {
 		w, h := termSize(fd)
-		frame := renderRun(st, view, w, h, time.Now(), alive)
-		fmt.Fprint(out, "\x1b[H"+strings.ReplaceAll(frame, "\n", "\x1b[K\r\n")+"\x1b[K\x1b[J")
-		out.Flush()
+		lines := strings.Split(renderRun(st, view, w, h, time.Now(), alive), "\n")
+		var b strings.Builder
+		if len(shown) != len(lines) || shownW != w {
+			b.WriteString("\x1b[2J")
+			shown = nil
+		}
+		for i, l := range lines {
+			if shown != nil && shown[i] == l {
+				continue
+			}
+			fmt.Fprintf(&b, "\x1b[%d;1H%s\x1b[K", i+1, l)
+		}
+		shown, shownW = lines, w
+		if b.Len() > 0 {
+			out.WriteString(b.String())
+			out.Flush()
+		}
 	}
-	refresh()
+	apply(load())
 	draw()
+	loads := make(chan loaded, 1)
+	loading := false
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
@@ -673,10 +709,17 @@ func runTUI(dir string) error {
 		case <-winch:
 			draw()
 		case <-tick.C:
-			refresh()
+			if !loading {
+				loading = true
+				go func() { loads <- load() }()
+			}
 			if view.Flash != "" && time.Since(flashAt) > 4*time.Second {
 				view.Flash = ""
 			}
+			draw()
+		case r := <-loads:
+			loading = false
+			apply(r)
 			draw()
 		case k := <-keys:
 			// 스크롤 같은 보기 키에서는 state.json 을 다시 읽지 않는다(1초 틱이 최신으로 유지). 쌓인 키는 모두 처리하고 한 번만 그린다.
@@ -694,10 +737,14 @@ func runTUI(dir string) error {
 				}
 			}
 			if clear {
-				fmt.Fprint(out, "\x1b[2J")
+				shown = nil
 			}
 			if logToggled { // 로그 창을 켠 직후 바로 내용이 보이게
-				refresh()
+				if view.NoLog {
+					view.LogLines = nil
+				} else {
+					view.LogLines = tailLines(filepath.Join(dir, workerLog), maxLogLines)
+				}
 			}
 			if view.Flash != "" {
 				flashAt = time.Now()

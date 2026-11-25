@@ -1,0 +1,32 @@
+# ===== 설치 (최초 1회, 인터넷 불필요) =====
+# Windows
+setup.bat
+# Linux (python3 가 3.11 이 아니면 앞에 PYTHON=python3.11)
+bash setup.sh
+
+# ===== 실행 (Linux 는 .venv/bin/python, Windows 는 .venv\Scripts\python) =====
+# 중급 코스에서 직접 운전 (H 키로 조작법 표시)
+.venv/bin/python main.py
+# 초급 / 고급 코스
+.venv/bin/python main.py --level easy
+.venv/bin/python main.py --level hard
+# 버스 + 하이브리드
+.venv/bin/python main.py --vehicle bus --powertrain hybrid
+# 트럭 + 수동 변속 (Z/X 로 기어 변경)
+.venv/bin/python main.py --vehicle truck --powertrain manual
+# 30 km 직선 코스, 트래픽 없이 제로백(0-100/200/300) 측정
+.venv/bin/python main.py --level long --cars 0
+# 주차장 (G 로 후진, N 으로 다음 주차칸)
+.venv/bin/python main.py --level parking
+# 외부 컨트롤러 예제: 내비 데이터 방식 / 화면 캡처 방식
+.venv/bin/python main.py --controller examples/nav_follow.py
+.venv/bin/python main.py --controller examples/vision_lane.py
+
+# ===== 확인용 =====
+# 화면 없이 10분 자동주행 후 통계 (충돌 있으면 종료코드 1)
+.venv/bin/python main.py --headless --seconds 600 --level hard
+# 기능 테스트
+.venv/bin/python tests/test_sim.py
+# 예제 컨트롤러 화면 없이 실행
+.venv/bin/python examples/nav_follow.py --seconds 300
+.venv/bin/python examples/vision_lane.py --seconds 120

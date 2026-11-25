@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="578" viewBox="0 0 620 578" font-family="sans-serif" font-size="13">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker></defs>
+<rect x="60" y="10" width="500" height="40" rx="8" fill="#eef7ee" stroke="#4a6fa5"/>
+<text x="310.0" y="35.0" text-anchor="middle" fill="#222">python main.py --level --vehicle --powertrain</text>
+<line x1="310.0" y1="50" x2="310.0" y2="70" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="72" width="500" height="40" rx="8" fill="#eef7ee" stroke="#4a6fa5"/>
+<text x="310.0" y="97.0" text-anchor="middle" fill="#222">make_world: 코스(Track+진출로)/주차장, 트래픽, 내 차 생성</text>
+<line x1="310.0" y1="112" x2="310.0" y2="132" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="134" width="500" height="40" rx="8" fill="#e8f1fb" stroke="#4a6fa5"/>
+<text x="310.0" y="159.0" text-anchor="middle" fill="#222">매 프레임 1/60초</text>
+<line x1="310.0" y1="174" x2="310.0" y2="194" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="196" width="500" height="40" rx="8" fill="#e8f1fb" stroke="#4a6fa5"/>
+<text x="310.0" y="221.0" text-anchor="middle" fill="#222">입력: 키보드(페달 커브) 또는 외부 컨트롤러(obs, frame)</text>
+<line x1="310.0" y1="236" x2="310.0" y2="256" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="258" width="500" height="40" rx="8" fill="#e8f1fb" stroke="#4a6fa5"/>
+<text x="310.0" y="283.0" text-anchor="middle" fill="#222">AI: 선행차 탐색 + IDM 가속도 (N대 배열)</text>
+<line x1="310.0" y1="298" x2="310.0" y2="318" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="320" width="500" height="40" rx="8" fill="#e8f1fb" stroke="#4a6fa5"/>
+<text x="310.0" y="345.0" text-anchor="middle" fill="#222">내 차: MANUAL / ACC / AUTO → 동역학(엔진·모터·타이어)</text>
+<line x1="310.0" y1="360" x2="310.0" y2="380" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="382" width="500" height="40" rx="8" fill="#e8f1fb" stroke="#4a6fa5"/>
+<text x="310.0" y="407.0" text-anchor="middle" fill="#222">AI 차선 변경(MOBIL) + 위치 적분</text>
+<line x1="310.0" y1="422" x2="310.0" y2="442" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="444" width="500" height="40" rx="8" fill="#e8f1fb" stroke="#4a6fa5"/>
+<text x="310.0" y="469.0" text-anchor="middle" fill="#222">본선/진출로 판정, 가드레일, 충돌, 내비 안내, 제로백</text>
+<line x1="310.0" y1="484" x2="310.0" y2="504" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="506" width="500" height="40" rx="8" fill="#e8f1fb" stroke="#4a6fa5"/>
+<text x="310.0" y="531.0" text-anchor="middle" fill="#222">렌더: 운전석/추적/위에서 + HUD + 소리</text>
+<path d="M560,526.0 H595 V154.0 H564" fill="none" stroke="#c0392b" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="600" y="340.0" fill="#c0392b" transform="rotate(90 600 340.0)" text-anchor="middle">반복</text>
+</svg>

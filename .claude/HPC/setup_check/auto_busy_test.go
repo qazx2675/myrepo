@@ -29,7 +29,7 @@ func hasAny(l []string, sub string) bool {
 	return false
 }
 
-// (a)(b) 질문이 30분 떠 있는 동안 재판정·설정수정·stress-ng launch 가 계속되고, r 이면 launch 되어 묶음이 기록된다.
+// (a)(b) 질문이 30분 떠 있는 동안 재판정·설정수정이 계속되고, r 이면 launch 되어 묶음이 기록된다. stress-ng launch 는 CPU 가 보류된 동안 시작하지 않고 답(r) 뒤에 한다.
 func TestAutoBusyNoFreeze(t *testing.T) {
 	hosts := map[string]*autoHost{
 		"a": {check: "O", cpu: cpuNotRun, stress: cpuNotRun, cpuAfter: 45 * time.Minute},
@@ -40,7 +40,7 @@ func TestAutoBusyNoFreeze(t *testing.T) {
 	f.busyN = map[string]int{"a": 1}
 	f.onBusy = answerAfter(30*time.Minute, ansRetry)
 	w := runAutoFake(t, f, testConf())
-	want := "judge:@0 busy:a@0 judge:@10 judge:@20 fix:b@20 judge:@20 ng:c@20 cpu:a@30 probe:a@80 ng:a@80"
+	want := "judge:@0 busy:a@0 judge:@10 judge:@20 fix:b@20 judge:@20 cpu:a@30 ng:c@30 probe:a@80 ng:a@80"
 	if got := f.pick("judge", "fix", "busy", "cpu", "ng", "probe"); got != want {
 		t.Errorf("사건\n기대: %s\n실제: %s", want, got)
 	}
@@ -148,7 +148,7 @@ func TestAutoBusyStop(t *testing.T) {
 	}
 }
 
-// (f) stress-ng·CPU 둘 다 보류되면 질문은 하나씩 묻는다(앞 질문의 답을 받은 뒤 다음 질문).
+// (f) stress-ng 가 보류된 동안에는 CPU launch 를 시작하지 않는다(겹치면 CPU 의 삭제·등록이 보류된 stress-ng 의 인벤토리를 바꾼다). 답 뒤에 CPU 가 따로 묻는다.
 func TestAutoBusyTwoKinds(t *testing.T) {
 	hosts := map[string]*autoHost{
 		"a": {check: "O", cpu: cpuNotRun, stress: "O", cpuAfter: 45 * time.Minute},
@@ -158,15 +158,15 @@ func TestAutoBusyTwoKinds(t *testing.T) {
 	f.busyN = map[string]int{"a": 1, "b": 1}
 	f.onBusy = answerAfter(10*time.Minute, ansRetry)
 	w := runAutoFake(t, f, testConf())
-	if got, want := f.pick("busy", "cpu", "ng"), "busy:c@0 busy:a@0 ng:c@10 cpu:a@20"; got != want {
+	if got, want := f.pick("busy", "cpu", "ng"), "busy:c@0 ng:c@10 busy:a@10 cpu:a@20"; got != want {
 		t.Errorf("사건\n기대: %s\n실제: %s", want, got)
 	}
 	eqList(t, "답", f.busyAns, []string{"b=r@10", "a=r@20"})
 	if len(f.qTexts) != 2 || !strings.HasPrefix(f.qTexts[0], "stress-ng 테스트") || !strings.HasPrefix(f.qTexts[1], "CPU 테스트") {
 		t.Errorf("질문 차례: %q", f.qTexts)
 	}
-	if !hasAny(f.qDetail, "CPU 템플릿 인벤토리 사용 중, 앞 질문 뒤에 물음(launch 보류)") {
-		t.Errorf("진행 설명: %q", f.qDetail)
+	if hasAny(f.qDetail, "앞 질문 뒤에 물음") { // 한쪽이 보류된 동안 다른 쪽은 launch 를 시작하지 않으므로 둘이 함께 보류되지 않는다
+		t.Errorf("두 launch 가 함께 보류되었습니다: %q", f.qDetail)
 	}
 	log := f.logb.String()
 	if i, j := strings.Index(log, "답 q1: r"), strings.Index(log, "질문 q2"); i < 0 || j < i {

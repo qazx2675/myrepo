@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -72,7 +73,7 @@ func TestDeleteCheckNoMarkerWithoutBatch(t *testing.T) {
 	}
 }
 
-// 삭제 전과 같은 목록이 30초 동안 계속되면 중지한다. 재조회 횟수를 세고, 등록(yml/동기화)은 일어나지 않는다.
+// 삭제 전과 같은 목록이 60초(deleteStallWait) 동안 계속되면 중지한다. 재조회 횟수를 세고, 등록(yml/동기화)은 일어나지 않는다.
 func TestDeleteCheckIdenticalStops(t *testing.T) {
 	a, f, out := newDeleteCheckApp(t)
 	a.batchMode = true
@@ -81,9 +82,9 @@ func TestDeleteCheckIdenticalStops(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "삭제되지 않았") || !strings.Contains(err.Error(), "N2") || strings.Contains(err.Error(), "확인 불가") {
 		t.Fatalf("err = %v", err)
 	}
-	// 삭제 전 1회 + 삭제 뒤 0·10·20·30초 4회
-	if f.calls[hostsKey] != 5 {
-		t.Errorf("호스트 조회 %d회, want 5", f.calls[hostsKey])
+	// 삭제 전 1회 + 삭제 뒤 0·10·20·30·40·50·60초 7회
+	if f.calls[hostsKey] != 8 {
+		t.Errorf("호스트 조회 %d회, want 8", f.calls[hostsKey])
 	}
 	if f.calls["POST /api/v2/inventory_sources/11/update/"] != 0 || len(f.launches) != 0 {
 		t.Error("중지했는데 등록/launch 가 일어났습니다")
@@ -108,20 +109,77 @@ func TestDeleteCheckLateEmptied(t *testing.T) {
 	}
 }
 
-func TestDeleteCheckPartialWarns(t *testing.T) {
+// 일부만 지워지고 60초 동안 더 줄지 않으면 중지한다(남은 호스트를 오류에 보인다).
+func TestDeleteCheckPartialStalledStops(t *testing.T) {
 	a, f, out := newDeleteCheckApp(t)
+	a.batchMode = true
 	f.hostSeq = [][]string{{"n1", "n2", "n3"}, {"n3"}}
-	if err := a.inventoryDelete(); err != nil {
-		t.Fatalf("일부만 남으면 계속 진행해야 합니다: %v", err)
+	err := a.inventoryDelete()
+	if err == nil || !strings.Contains(err.Error(), "끝나지 않았") || !strings.Contains(err.Error(), "n3") || !strings.Contains(err.Error(), "60초") {
+		t.Fatalf("err = %v", err)
 	}
-	if !strings.Contains(out.String(), markWarn) || !strings.Contains(out.String(), "n3") {
-		t.Errorf("경고가 없습니다: %q", out.String())
+	if strings.Contains(out.String(), deleteCheckMark) {
+		t.Errorf("실패인데 [삭제확인] 줄을 냈습니다: %q", out.String())
 	}
-	if f.calls[hostsKey] != 2 {
-		t.Errorf("조회 %d회, want 2", f.calls[hostsKey])
-	}
-	if h := historyText(a); !strings.Contains(h, "status=warn before=3 after=1") {
+	if h := historyText(a); !strings.Contains(h, "status=fail before=3 after=1") {
 		t.Errorf("hist=%q", h)
+	}
+}
+
+// 대량 삭제처럼 천천히 줄어들면 60초가 넘어도 계속 기다렸다가 다 지워지면 통과한다(실제 장애: 900대 삭제 중 30초 만에 중지).
+func TestDeleteCheckSlowProgressPasses(t *testing.T) {
+	a, f, out := newDeleteCheckApp(t)
+	a.batchMode = true
+	all := []string{"n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9"}
+	f.hostSeq = [][]string{all}
+	for i := 1; i <= len(all); i++ { // 10초마다 1대씩 줄어 90초 뒤 0대
+		f.hostSeq = append(f.hostSeq, all[i:])
+	}
+	if err := a.inventoryDelete(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "[삭제확인] before=9 after=0") || !strings.Contains(out.String(), "삭제 진행 중") {
+		t.Errorf("out=%q", out.String())
+	}
+}
+
+// 줄어드는 중이어도 10분(deleteMaxWait)을 넘으면 중지한다.
+func TestDeleteCheckMaxWaitStops(t *testing.T) {
+	a, f, _ := newDeleteCheckApp(t)
+	var all []string
+	for i := 0; i < 100; i++ {
+		all = append(all, fmt.Sprintf("n%03d", i))
+	}
+	f.hostSeq = [][]string{all}
+	for i := 1; i < len(all); i++ { // 10초마다 1대씩: 10분이면 60대만 지워짐
+		f.hostSeq = append(f.hostSeq, all[i:])
+	}
+	err := a.inventoryDelete()
+	if err == nil || !strings.Contains(err.Error(), "최대 대기 10분") || !strings.Contains(err.Error(), "끝나지 않았") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// 삭제 전에 없던 호스트만 남으면(삭제 전 호스트는 모두 지워짐) 경고하고 진행한다. 등록 뒤 완전일치 확인이 거른다.
+func TestDeleteCheckOnlyNewHostsPasses(t *testing.T) {
+	a, f, out := newDeleteCheckApp(t)
+	a.batchMode = true
+	f.hostSeq = [][]string{{"n1", "n2"}, {"x9"}}
+	if err := a.inventoryDelete(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "x9") || !strings.Contains(out.String(), "[삭제확인] before=2 after=1") {
+		t.Errorf("out=%q", out.String())
+	}
+}
+
+// 삭제 뒤 조회가 잠깐 실패해도(삭제 중 AWX 부하) 다시 조회해 통과한다.
+func TestDeleteCheckTransientReadError(t *testing.T) {
+	a, f, _ := newDeleteCheckApp(t)
+	f.hostSeq = [][]string{{"n1"}, {"n1"}, {}}
+	f.hostFail = map[int]bool{2: true}
+	if err := a.inventoryDelete(); err != nil {
+		t.Fatalf("일시적 조회 실패로 중지했습니다: %v", err)
 	}
 }
 
@@ -144,7 +202,10 @@ func TestDeleteCheckUnverifiedBefore(t *testing.T) {
 func TestDeleteCheckUnverifiedAfter(t *testing.T) {
 	a, f, _ := newDeleteCheckApp(t)
 	f.hostSeq = [][]string{{"n1"}}
-	f.hostFail = map[int]bool{2: true}
+	f.hostFail = map[int]bool{}
+	for i := 2; i <= 20; i++ { // 삭제 뒤 조회가 기한(60초)까지 계속 실패
+		f.hostFail[i] = true
+	}
 	err := a.inventoryDelete()
 	if err == nil || !strings.Contains(err.Error(), "확인 불가") || strings.Contains(err.Error(), "삭제되지 않았") {
 		t.Fatalf("err = %v", err)

@@ -221,6 +221,17 @@ func visibleRows(st *runState, onlyBad bool) []*hostRow {
 	return out
 }
 
+// visibleCount 는 visibleRows 의 개수(slice 를 만들지 않는다 — 스크롤 키마다 불리므로).
+func visibleCount(st *runState, onlyBad bool) int {
+	n := 0
+	for i := range st.Hosts {
+		if !onlyBad || notAllO(&st.Hosts[i], st.CheckOff) {
+			n++
+		}
+	}
+	return n
+}
+
 // after 는 t 가 now 로부터 얼마 뒤인지("47분 후" / "지남").
 func after(t, now time.Time) string {
 	if !t.After(now) {
@@ -861,9 +872,12 @@ func renderRun(st *runState, view viewState, w, h int, now time.Time, alive bool
 	default:
 		top := topLines(st, view, w, now, alive)
 		bottom := bottomLines(st, view, w, alive)
-		table := tableLines(st, view, w, tableCapacity(st, view, w, h, now, alive))
+		capRows := tableCapacity(st, view, w, h, now, alive)
+		var table []string
 		if view.Result {
-			table = resultPanel(st, view, w, tableCapacity(st, view, w, h, now, alive), now)
+			table = resultPanel(st, view, w, capRows, now)
+		} else {
+			table = tableLines(st, view, w, capRows)
 		}
 		logH := logHeight(view, h, len(top), len(bottom))
 		lines = append(lines, top...)

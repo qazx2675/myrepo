@@ -113,12 +113,14 @@ func (w *worker) runAuto() {
 				a.fix(hosts)
 				continue
 			}
-			if a.ngCh == nil && !a.held("stress-ng") && !now.Before(au.NGWait) { // ⑤
+			// 다른 쪽 launch 가 보류 중이면(인벤토리 사용 중 질문) 새 launch 를 시작하지 않는다: 보류된 stress-test 는 이미 자기 yml 을
+			// 등록해 두었으므로, 이쪽이 인벤토리를 지우고 다시 등록하면 보류된 쪽이 남의 인벤토리로 launch 된다.
+			if a.ngCh == nil && !a.held("stress-ng") && !a.held("CPU") && !now.Before(au.NGWait) { // ⑤
 				if hosts := w.autoNGTargets(); len(hosts) > 0 && a.launchNG(hosts) {
 					continue
 				}
 			}
-			if len(au.Batch) == 0 && a.cpuCh == nil && !a.held("CPU") && len(au.Queue) > 0 && !now.Before(au.QueueWait) { // ③
+			if len(au.Batch) == 0 && a.cpuCh == nil && !a.held("CPU") && !a.held("stress-ng") && len(au.Queue) > 0 && !now.Before(au.QueueWait) { // ③
 				if a.launchCPU() {
 					continue
 				}
