@@ -66,6 +66,7 @@ func TestYamlStateError(t *testing.T) {
 // 등록이 끝나면 [등록] yml=<yml> hosts=<등록 직후 인벤토리 호스트> 줄을 낸다. 호스트를 못 읽으면 yml 만 낸다(경고 포함).
 func TestRegisterPrintsRegisteredLine(t *testing.T) {
 	a, f, _ := newTestApp(t)
+	fakeClock(t) // 완전일치 재조회 대기를 건너뛴다
 	var out bytes.Buffer
 	a.out = &out
 	f.hosts = []string{"n2", "n1"}
@@ -82,7 +83,7 @@ func TestRegisterPrintsRegisteredLine(t *testing.T) {
 	if _, err := a.register("hong_cpu.yaml", twoTargets()); err == nil || !strings.Contains(err.Error(), "완전일치 확인 불가") {
 		t.Fatalf("호스트를 못 읽으면 완전일치 확인 불가로 실패해야 함: %v", err)
 	}
-	if !strings.Contains(out.String(), "\n[등록] yml=hong_cpu_2ea.yml\n") || !strings.Contains(out.String(), "호스트를 읽지 못했습니다") {
+	if !strings.Contains(out.String(), "\n[등록] yml=hong_cpu_2ea.yml\n") || !strings.Contains(out.String(), "호스트 조회 실패") {
 		t.Errorf("호스트를 못 읽을 때:\n%s", out.String())
 	}
 }
