@@ -264,8 +264,8 @@ func TestInstallDcgmScp(t *testing.T) {
 		t.Fatalf("%+v", tg)
 	}
 	k := f.kinds()
-	tail := k[len(k)-5:]
-	if tail[0] != "mkdir" || tail[1] != "rpm-test" || tail[2] != "dcgm-scp" || !strings.HasPrefix(tail[3], "rm -f '/tmp/gpu_install/datacenter-gpu-manager-4-core-4.10.0-1") || tail[4] != "dcgm-start" {
+	tail := k[len(k)-6:]
+	if tail[0] != "mkdir" || tail[1] != "rpm-test" || tail[2] != "dcgm-scp" || !strings.HasPrefix(tail[3], "rm -f '/tmp/gpu_install/datacenter-gpu-manager-4-core-4.10.0-1") || tail[4] != "dcgm-start" || tail[5] != "rc.local" {
 		t.Errorf("%q", k)
 	}
 	if len(f.copied) != 5 || !strings.Contains(f.copied[4], "datacenter-gpu-manager-4-proprietary-cuda13-4.10.0-1.x86_64.rpm gpu01:/tmp/gpu_install") {
@@ -309,7 +309,7 @@ func TestInstallDcgmFail(t *testing.T) {
 	tg := newTarget(methodMount, okStatus())
 	tg.Version = "470.1"
 	installHost(&Config{AutofsPath: "/auto"}, tg)
-	if tg.Fail != "" || tg.DcgmNote != "skip(CUDA 11.4)" || !reflect.DeepEqual(f.kinds(), []string{"sh '/auto/NVIDIA-Linux-x86_64-470.1.run' -s", "verify"}) {
+	if tg.Fail != "" || tg.DcgmNote != "skip(CUDA 11.4)" || !reflect.DeepEqual(f.kinds(), []string{"sh '/auto/NVIDIA-Linux-x86_64-470.1.run' -s", "verify", "rc.local"}) {
 		t.Errorf("%+v %q", tg, f.kinds())
 	}
 	if !strings.Contains(screen.(*bytes.Buffer).String(), "DCGM 을 건너뜁니다") {

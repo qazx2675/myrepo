@@ -90,6 +90,8 @@ AUTOFS_PATH 와 인자가 모두 비어 있으면 사용법을 출력하고 종�
 5. **드라이버 설치**: `.run -s`. 실패하면 `nvidia-dcgm`, `nvidia-persistenced`, `nvidia-fabricmanager` 를 중지하고 `rmmod` 한 뒤 **1회 재시도**합니다. 그래도 실패하면 점유 프로세스와 `/var/log/nvidia-installer.log` 끝부분을 남기고 fail.
 6. **CUDA 판정**: 설치 후 `nvidia-smi` 의 `CUDA Version` major 가 12 또는 13 이면 DCGM 으로 갑니다. 그 밖이면 **DCGM 을 건너뛰고 경고**(드라이버는 성공).
 7. **DCGM 설치**와 8. **서비스 기동·판정**은 아래 6~7절을 봅니다.
+9. **rc.local 실행**: 드라이버·DCGM 까지 성공한 서버에서만 `/etc/rc.local` 을 실행합니다. 파일이 없으면 건너뛰고, 실행 권한이 없으면 `bash /etc/rc.local` 로 실행합니다(최대 10분).
+   종료코드가 0 이 아니면(10분 초과는 124) `rc.local failed(rc=N)` 사유로 fail 입니다. 드라이버·DCGM 은 설치된 상태로 남습니다. 출력은 호스트 로그에 남습니다.
 
 ## 6. mount / scp 분기
 

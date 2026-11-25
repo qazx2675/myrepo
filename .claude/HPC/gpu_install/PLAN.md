@@ -75,6 +75,8 @@ gpu02 570.172.08      # 이 호스트는 이 버전으로 설치
      이어서 `dnf localinstall -y --disablerepo='*'` 로 설치하고 rpm 파일을 지운다.
 9. **서비스 기동과 판정**: `systemctl enable nvidia-dcgm` → `systemctl restart nvidia-dcgm` 을 실행한다.
    `is-active`, `is-enabled`, `dcgmi discovery -l` 이 모두 정상이고 GPU가 1개 이상 보여야 **DCGM 정상**으로 판정한다.
+10. **rc.local 실행**: 드라이버·DCGM(또는 CUDA 12/13 외라 DCGM 건너뜀)까지 성공한 서버에서만 `/etc/rc.local` 을 실행한다.
+   없으면 건너뛰고, 실행 권한이 없으면 `bash` 로 실행한다. 최대 10분. 종료코드가 0 이 아니면 `rc.local failed(rc=N)` 로 fail_list 에 남긴다.
 
 ## 5. 출력
 
@@ -98,6 +100,7 @@ gpu02 570.172.08      # 이 호스트는 이 버전으로 설치
 | CUDA 12/13 이외 | DCGM 건너뛰고 경고 |
 | DCGM 판정 | active + enabled + dcgmi discovery |
 | nouveau | 언로드 후 진행 (안 되면 fail) |
+| rc.local | 설치 성공 서버에서만 실행. 없으면 건너뜀, +x 없으면 bash, 실패 시 fail_list |
 | Go/bash | bash = 오케스트레이션, 질문·병렬·판정은 Go |
 | 병렬·인자 | 기본 10대, list 는 두 번째 인자(기본 ./list) |
 

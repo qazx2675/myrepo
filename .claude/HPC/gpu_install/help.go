@@ -41,7 +41,9 @@ const helpText = `gpu_install - 여러 GPU 서버에 NVIDIA 드라이버(.run)�
                    mount: rhel.repo 를 설치하는 동안만 enabled=1 (성공·실패·중단 모두 0 으로 복구)
                    scp  : rhel.repo baseurl 과 같은 관리 서버 경로에서 rpm 과 부족한 의존성 rpm 을 보내 설치
                    CUDA 가 12/13 이 아니면 DCGM 은 건너뜀. 끝나면 nvidia-dcgm enable·start, dcgmi 로 GPU 확인
-  7. 결과 출력     HOST | 방식 | 이전→설치버전 | CUDA | DCGM | dcgm상태 | 결과
+  7. rc.local      드라이버·DCGM 까지 성공한 서버에서 /etc/rc.local 실행 (없으면 건너뜀, 실행 권한 없으면 bash 로,
+                   최대 10분. 실패하면 'rc.local failed(rc=N)' 로 fail)
+  8. 결과 출력     HOST | 방식 | 이전→설치버전 | CUDA | DCGM | dcgm상태 | 결과
 
 [결과 파일]  실행한 현재 디렉토리에 생깁니다
   logs/<날짜시각>/<호스트>.log   호스트별 원격 출력 전체
