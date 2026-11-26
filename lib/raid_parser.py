@@ -554,6 +554,7 @@ def _normalize_drive_obj(d):
         "capacity_human": format_capacity_human(cap_bytes),
         "status": status_str,
         "assigned_volumes": [],
+        "hba_raw_volumes": [],
         "_link_volumes": link_vols,
     }
 
@@ -572,7 +573,13 @@ def _normalize_volume_obj(v, fallback_idx=0):
         or v.get("Name")
         or ("Volume_%s" % vid)
     )
-    raid_type = v.get("RAIDType") or v.get("Raid") or v.get("VolumeType") or ""
+    raw_raid_type = v.get("RAIDType")
+    raw_raid = v.get("Raid")
+    raw_vol_type = v.get("VolumeType")
+    raid_type = raw_raid_type or raw_raid or raw_vol_type or ""
+    rt_low = to_text(raw_raid_type or raw_raid or "").strip().lower()
+    vt_low = to_text(raw_vol_type or "").strip().lower()
+    is_hba_raw = (rt_low == "none") or (not rt_low and vt_low == "rawdevice")
 
     cap_bytes = v.get("CapacityBytes")
     if not isinstance(cap_bytes, INT_TYPES) or cap_bytes <= 0:
@@ -611,6 +618,7 @@ def _normalize_volume_obj(v, fallback_idx=0):
         "name": to_text(name),
         "odata_id": to_text(v.get("@odata.id", "")),
         "raid_type": to_text(raid_type),
+        "is_hba_raw": is_hba_raw,
         "capacity_bytes": int(cap_bytes),
         "drive_refs": drive_refs,
     }
@@ -636,6 +644,8 @@ def _link_drives_and_volumes(drives, volumes):
 
     # Incorporate drive._link_volumes into volumes' drive_refs
     for d in drives:
+        if "hba_raw_volumes" not in d:
+            d["hba_raw_volumes"] = []
         du = norm_uri(d.get("odata_id", ""))
         for vu_raw in d.get("_link_volumes", []):
             vu = norm_uri(vu_raw)
@@ -644,17 +654,22 @@ def _link_drives_and_volumes(drives, volumes):
                 if du and du not in [norm_uri(x) for x in v["drive_refs"]]:
                     v["drive_refs"].append(d["odata_id"])
                 label = v["name"] or v["id"]
-                if label and label not in d["assigned_volumes"]:
-                    d["assigned_volumes"].append(label)
+                if v.get("is_hba_raw"):
+                    if label and label not in d["hba_raw_volumes"]:
+                        d["hba_raw_volumes"].append(label)
+                else:
+                    if label and label not in d["assigned_volumes"]:
+                        d["assigned_volumes"].append(label)
             else:
                 # Volume wasn't fetched separately, still record URI basename as assigned
                 label = vu.split("/")[-1] if vu else vu_raw
                 if label and label not in d["assigned_volumes"]:
                     d["assigned_volumes"].append(label)
 
-    # Map volume drive_refs -> drive.assigned_volumes
+    # Map volume drive_refs -> drive.assigned_volumes (or hba_raw_volumes for HBA/Raw)
     for v in volumes:
         label = v.get("name") or v.get("id")
+        is_raw = bool(v.get("is_hba_raw"))
         ref_uris = [norm_uri(r) for r in v.get("drive_refs", []) if r]
         ref_locs = [norm_loc(r) for r in v.get("drive_refs", []) if r]
         for d in drives:
@@ -665,8 +680,13 @@ def _link_drives_and_volumes(drives, volumes):
                 matched = True
             elif dl and dl in ref_locs:
                 matched = True
-            if matched and label and label not in d["assigned_volumes"]:
-                d["assigned_volumes"].append(label)
+            if matched and label:
+                if is_raw:
+                    if label not in d["hba_raw_volumes"]:
+                        d["hba_raw_volumes"].append(label)
+                else:
+                    if label not in d["assigned_volumes"]:
+                        d["assigned_volumes"].append(label)
 
     # Remove internal helper key
     for d in drives:
@@ -1354,7 +1374,10 @@ def cmd_summarize(args):
                 nvme_n += 1
             assigned = ", ".join(d.get("assigned_volumes") or [])
             if not assigned:
-                assigned = "-"
+                if d.get("hba_raw_volumes"):
+                    assigned = "[HBA/Raw]"
+                else:
+                    assigned = "-"
             loc_disp = d.get("location", "")
             if alias:
                 loc_disp = "%s (%s)" % (loc_disp, alias)
@@ -1565,6 +1588,8 @@ def _find_conflicts(ctrl, selected_drives):
     seen_vol_keys = set()
 
     for v in ctrl.get("volumes") or []:
+        if v.get("is_hba_raw"):
+            continue
         v_key = norm_uri(v.get("odata_id", "")) or ("id:%s:%s" % (v.get("id", ""), v.get("name", "")))
         v_refs_uri = set([norm_uri(r) for r in v.get("drive_refs", []) if r])
         v_refs_loc = set([norm_loc(r) for r in v.get("drive_refs", []) if r])
@@ -1799,6 +1824,7 @@ def cmd_plan(args):
     plan_briefs = []
     table_rows = []
     span_warnings = []
+    hba_notices = []
 
     for inv in invs:
         ip = inv.get("ip", "")
@@ -1926,6 +1952,12 @@ def cmd_plan(args):
             continue
 
         conflicts = _find_conflicts(ctrl, selected_drives)
+        hba_cnt = len([d for d in selected_drives if d.get("hba_raw_volumes")])
+        if hba_cnt > 0:
+            hba_notices.append(
+                "[안내] %s: HBA/Raw(RAIDType=None) 디스크 %d개 포함 — DELETE 없이 RAID 생성(POST) 시 컨트롤러가 자동 전환합니다. (OS 디스크 포함 여부 주의)"
+                % (ip, hba_cnt)
+            )
         create_volumes = _build_create_volumes(norm_raid, raid0_mode, selected_drives, name_prefix, stripe_bytes)
 
         delete_volumes = []
@@ -2030,6 +2062,10 @@ def cmd_plan(args):
         ["IP", "Model", "Gen", "Backend", "Selected Drives", "Target RAID", "Existing/Del Vols", "Status"],
         table_rows
     ))
+    if hba_notices:
+        out_print("")
+        for hn in hba_notices:
+            out_print(hn)
     if span_warnings:
         out_print("")
         for sw in span_warnings:
@@ -2152,6 +2188,8 @@ def cmd_build_redfish_payloads(args):
 
     del_lines = []
     for dv in plan.get("delete_volumes") or []:
+        if dv.get("is_hba_raw") or to_text(dv.get("raid_type", "")).strip().lower() == "none":
+            continue
         uri = to_text(dv.get("odata_id", "")).strip()
         if uri:
             del_lines.append(uri)

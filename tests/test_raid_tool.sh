@@ -480,10 +480,80 @@ def build_gen11_fixtures():
     return f
 
 
+def build_gen11_hba_raw_fixtures():
+    """Gen11 SR932i-p (iLO 6) with HBA/Raw drives auto-exposed as RAIDType='None' volumes."""
+    f = {}
+    f["/redfish/v1/Systems/1"] = {
+        "@odata.id": "/redfish/v1/Systems/1",
+        "Id": "1",
+        "Model": "ProLiant DL380 Gen11",
+        "PowerState": "On",
+        "Oem": {"Hpe": {"PostState": "FinishedPost"}}
+    }
+    f["/redfish/v1/Managers/1"] = {
+        "@odata.id": "/redfish/v1/Managers/1",
+        "Id": "1",
+        "FirmwareVersion": "iLO 6 v1.78"
+    }
+    f["/redfish/v1/Systems/1/Storage"] = {
+        "@odata.id": "/redfish/v1/Systems/1/Storage",
+        "Members": [
+            {"@odata.id": "/redfish/v1/Systems/1/Storage/DE009000"}
+        ]
+    }
+    drives_list = []
+    vol_members = []
+    for idx in range(1, 9):
+        vid = 53 + idx
+        d_uri = "/redfish/v1/Systems/1/Storage/DE009000/Drives/%d" % idx
+        v_uri = "/redfish/v1/Systems/1/Storage/DE009000/Volumes/%d" % vid
+        drives_list.append({"@odata.id": d_uri})
+        vol_members.append({"@odata.id": v_uri})
+        f[d_uri] = {
+            "@odata.id": d_uri,
+            "Id": str(idx),
+            "Name": "SAS HDD 1I:1:%d" % idx,
+            "Protocol": "SAS",
+            "MediaType": "HDD",
+            "CapacityBytes": 2400476553216,
+            "PhysicalLocation": {"PartLocation": {"ServiceLabel": "1I:1:%d" % idx}},
+            "Status": {"State": "Enabled", "Health": "OK"},
+            "Links": {"Volumes": [{"@odata.id": v_uri}]}
+        }
+        f[v_uri] = {
+            "@odata.id": v_uri,
+            "Id": str(vid),
+            "Name": "HBA_Drive_%d" % vid,
+            "RAIDType": "None",
+            "CapacityBytes": 2400476553216,
+            "Links": {"Drives": [{"@odata.id": d_uri}]}
+        }
+    f["/redfish/v1/Systems/1/Storage/DE009000"] = {
+        "@odata.id": "/redfish/v1/Systems/1/Storage/DE009000",
+        "Id": "DE009000",
+        "Name": "HPE SR932i-p Gen11",
+        "StorageControllers": [
+            {"Model": "HPE SR932i-p Gen11", "SerialNumber": "SR932HBA0004"}
+        ],
+        "Drives": drives_list,
+        "Volumes": {"@odata.id": "/redfish/v1/Systems/1/Storage/DE009000/Volumes"}
+    }
+    f["/redfish/v1/Systems/1/Storage/DE009000/Volumes"] = {
+        "@odata.id": "/redfish/v1/Systems/1/Storage/DE009000/Volumes",
+        "Members": vol_members
+    }
+    f["/redfish/v1/Systems/1/Storage/DE009000/Volumes/Capabilities"] = {
+        "@odata.id": "/redfish/v1/Systems/1/Storage/DE009000/Volumes/Capabilities",
+        "RAIDType@Redfish.AllowableValues": ["RAID0", "RAID1", "RAID5", "RAID6", "RAID10"]
+    }
+    return f
+
+
 SERVERS = {
     "10.10.0.1": build_gen10_fixtures,
     "10.10.0.2": build_gen10plus_fixtures,
     "10.10.0.3": build_gen11_fixtures,
+    "10.10.0.4": build_gen11_hba_raw_fixtures,
 }
 
 
@@ -894,6 +964,10 @@ case "$SUBCMD" in
             exit 1
         fi
         log_call "rawdelete|${IP}|${URI}|${CACHE_DIR}"
+        if [ "$IP" = "10.10.0.4" ]; then
+            echo "An invalid response body was returned: No JSON object could be decoded (405 Method Not Allowed on HBA/None)" >&2
+            exit 1
+        fi
         printf '{"Message": "Deleted %s"}\n' "$URI"
         exit 0
         ;;
@@ -1513,6 +1587,44 @@ y
 "
 assert_eq "$LAST_RC" "0" "Gen11 1I:1:1-1I:1:8 exited 0"
 assert_eq "$(verify_gen11_drives "$MOCK_AUDIT_DIR" "sas" 8)" "OK" "Gen11 1I:1:1-1I:1:8 resolves exact 8 physical SAS locations"
+
+# 4e. Gen11 SR932i-p HBA/Raw (RAIDType='None', DELETE returns 405): must NOT attempt rawdelete, POSTs directly!
+run_case "gen11_hba_raw_none" "10.10.0.4" \
+    "Administrator
+${TEST_SECRET}
+auto
+sdb-sdh
+0
+1
+y
+"
+assert_eq "$LAST_RC" "0" "Gen11 SR932i-p HBA/Raw (RAIDType=None) exited 0 without --force-delete"
+assert_contains "$LAST_OUT" "[HBA/Raw]" "Gen11 SR932i-p HBA/Raw drives labeled [HBA/Raw] in drive table"
+
+G11_HBA_VERIFY="$("$PYTHON_BIN" - "$(to_py_path "$MOCK_AUDIT_DIR")" <<'PYEOF'
+import os, sys, json
+audit_dir = sys.argv[1]
+with open(os.path.join(audit_dir, "calls.log"), "r") as fh:
+    calls = [l.strip() for l in fh if l.strip()]
+dels = [c for c in calls if c.startswith("rawdelete|10.10.0.4|")]
+posts = [c for c in calls if c.startswith("rawpost|10.10.0.4|/redfish/v1/Systems/1/Storage/DE009000/Volumes")]
+if dels:
+    print("FAIL: must NOT call rawdelete on RAIDType=None HBA/Raw volumes, got %d" % len(dels))
+    sys.exit(0)
+if len(posts) != 1:
+    print("FAIL: expected 1 rawpost, got %d" % len(posts))
+    sys.exit(0)
+with open(posts[0].split("|")[3], "r") as fh:
+    body = json.load(fh).get("body", {})
+drives = [d.get("@odata.id", "") for d in body.get("Links", {}).get("Drives", [])]
+expected = ["/redfish/v1/Systems/1/Storage/DE009000/Drives/%d" % i for i in range(2, 9)]
+if body.get("RAIDType") != "RAID0" or sorted(drives) != sorted(expected):
+    print("FAIL: unexpected payload RAIDType=%r drives=%r" % (body.get("RAIDType"), drives))
+    sys.exit(0)
+print("OK")
+PYEOF
+)"
+assert_eq "$G11_HBA_VERIFY" "OK" "Gen11 SR932i-p HBA/Raw skips rawdelete (0 deletes) and POSTs RAID0 on sdb-sdh (Drives 2..8)"
 
 # ===========================================================================
 # 5. Heterogeneous Multi-Server Batch (10.10.0.1 + 10.10.0.2 + 10.10.0.3) & --dry-run
