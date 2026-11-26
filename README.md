@@ -1,6 +1,6 @@
 # Confluence Storage Format(`.xhtml`) 문서 모음
 
-선택된 **17개 프로젝트**(HPC 12개 · VM 3개 · 공통 2개)에 대해 각 도구가 **무엇을 하는 도구인지**와 **사전 빌드된 바이너리·스크립트를 어떻게 실행하는지**를 **한국어 Confluence Storage Format(`.xhtml`)**으로 정리한 문서 모음입니다.
+선택된 **18개 프로젝트**(HPC 13개 · VM 3개 · 공통 2개)에 대해 각 도구가 **무엇을 하는 도구인지**와 **사전 빌드된 바이너리·스크립트를 어떻게 실행하는지**를 **한국어 Confluence Storage Format(`.xhtml`)**으로 정리한 문서 모음입니다.
 
 - **제공 형태**: 모든 Go 도구는 사전 빌드 완료된 실행 바이너리 기준(Go 빌드 절차 제외), Bash 스크립트는 배치 후 즉시 실행 기준
 - **폴더 규칙**: `<프로젝트명>_docs/` (`<slug>.xhtml` + `README.md`)
@@ -33,9 +33,9 @@
 
 ---
 
-## 프로젝트별 문서 목차 (총 17개)
+## 프로젝트별 문서 목차 (총 18개)
 
-### HPC (12개)
+### HPC (13개)
 
 | ID | 양식 | 문서 폴더 | `.xhtml` 문서 | 한 줄 요약 |
 |---|---|---|---|---|
@@ -51,6 +51,7 @@
 | `H13` | `T2` | [`setup_check_docs/`](./setup_check_docs/README.md) | [`setup_check.xhtml`](./setup_check_docs/setup_check.xhtml) | 신규 OS 설치 5상태 일괄 판정 및 `config_check`·`stress-test`(`-run`) 자동 연계 도구 |
 | `H14` | `T2` | [`stress-test_docs/`](./stress-test_docs/README.md) | [`stress_test.xhtml`](./stress-test_docs/stress_test.xhtml) | AWX `cpu`/`stress-ng` 부하 실행 및 `gossh` `/proc/loadavg` 1분 로드 감시·실행 판정 바이너리 |
 | `H15` | `T2` | [`조사_docs/`](./조사_docs/README.md) | [`survey.xhtml`](./조사_docs/survey.xhtml) | 표1 자산 목록을 `gossh`로 병렬 수집해 엑셀 붙여넣기용 TSV로 생성하는 자산 조사 도구 |
+| `H16` | `T1` | [`gpu_install_docs/`](./gpu_install_docs/README.md) | [`gpu_install_confluence.xhtml`](./gpu_install_docs/gpu_install_confluence.xhtml) | 폐쇄망 GPU 서버 NVIDIA 드라이버(`.run`) + CUDA 12/13 맞춤 DCGM 4 일괄 설치 바이너리+래퍼 (번호 표시 PNG 6장 포함) |
 
 ### VM (3개)
 
