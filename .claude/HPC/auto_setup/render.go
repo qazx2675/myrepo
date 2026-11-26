@@ -414,6 +414,8 @@ type selection struct {
 	Inline     []string // 키 안내 줄 바로 아래에 붙는 줄들 (v0.7.1: m 변경 메뉴, d 수동 완료 프롬프트). 비면 화면은 종전과 같다
 	Direct     bool     // os6_mgmt(원격 클라이언트): c/t/g 를 이 서버에서 직접 실행 — 확인 질문에 표시
 	Release    bool     // h→u 보류 해제 y/n 확인 중
+	LdapReq    bool     // l LDAP 복원 확인 중 (y 선택 호스트 / a 복원 대기 전체)
+	LdapHost   string   // l 확인 중의 선택 호스트 (LDAP 백업 ok 일 때만, 비면 y 선택지 없음)
 }
 
 type grpRef struct{ Job, Grp int }
@@ -551,6 +553,17 @@ func visibleHosts(g *SnapGroup, filter bool) []SnapHost {
 		}
 	}
 	return out
+}
+
+// ldapPendingCount: 그룹(전체 보기면 job 전체)의 LDAP '복원 대기(명령 필요)' 호스트 수
+func ldapPendingCount(g *SnapGroup) int {
+	n := 0
+	for i := range g.Hosts {
+		if ldapPending(g.Hosts[i].Ldap) {
+			n++
+		}
+	}
+	return n
 }
 
 func progressCount(c StageCounts) int {
@@ -1095,6 +1108,9 @@ func detailFoot(s Snapshot, sel selection, j *SnapJob, g *SnapGroup, width int, 
 	if sel.Yml == allView {
 		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀\n" + menuHint(sel, true)
 	}
+	if n := ldapPendingCount(g); n > 0 { // LDAP 복원 대기 호스트가 있을 때만 (없으면 키 안내는 종전과 같다)
+		hint += fmt.Sprintf("  l LDAP 복원(대기 %d)", n)
+	}
 	foot = append(foot, hintLines(color, width, hint)...)
 	foot = append(foot, sel.Inline...)
 	return strings.Split(strings.Join(foot, "\n"), "\n")
@@ -1132,8 +1148,22 @@ func wrapLine(color bool, width int, segs ...seg) string {
 // manualLine: [c] OS 체크 수동 실행 — 완료 여부와 상관없이 활성(그룹 전체 시도, 접속불가는 wall 에 표시), 확인 중이면 y/n 질문.
 // 좁으면 여러 줄("\n")이 된다.
 func manualLine(sel selection, g *SnapGroup, width int, color bool) string {
+	if sel.LdapReq {
+		segs := []seg{{" LDAP 복원(파일 덮어씀·서비스 재시작):", stYellow}}
+		if sel.LdapHost != "" {
+			segs = append(segs, seg{" [y] " + sel.LdapHost + " 다시 비교 후 필요하면 복원", stYellow})
+		}
+		if n := ldapPendingCount(g); n > 0 {
+			what := "이 그룹"
+			if g.Yml == allView {
+				what = "job 전체"
+			}
+			segs = append(segs, seg{fmt.Sprintf("  [a] %s의 복원 대기 %d대", what, n), stYellow})
+		}
+		return wrapLine(color, width, append(segs, seg{"  그 밖의 키 취소", stYellow})...)
+	}
 	if sel.Release {
-		return wrapLine(color, width, seg{fmt.Sprintf(" 보류 %d대를 해제 → LDAP 복원·'설정체크 + ", g.Counts.Held), stYellow},
+		return wrapLine(color, width, seg{fmt.Sprintf(" 보류 %d대를 해제 → LDAP 비교(복원은 l 명령)·'설정체크 + ", g.Counts.Held), stYellow},
 			seg{"설정수정", stRed}, seg{"' 자동 흐름으로 진행. 계속? [y/n]", stYellow})
 	}
 	if g.Yml == allView {
@@ -1208,7 +1238,8 @@ func renderHelp(width, height int, color bool) string {
 		"               g (3) 재확인 - 서버 상태 수동 재확인. 완료 제외 모든 호스트를 os8 → 안 되면 os6_mgmt → 둘 다 안 되면 접속불가. 진행 과정·실패 지점·최종 결과가 화면에 실시간 표시",
 		"               d (4) 수동 완료 - 안내 줄 아래에서 1 이 호스트 / 2 그룹 미완료 전체 선택 → y 확인. 부팅 시각 검증 없이 완료로 인정, 체크스크립트는 실행 안 함 (CLI: auto_setup done)",
 		"               v (5) 결과 - 이 그룹의 가장 최근 수동 실행 결과 보기",
-		"               u (6) 보류 해제 - 보류 호스트가 있을 때만 보임. 늦은 READY 로 보류된 호스트(전체 보기면 job 전체)를 y 확인 후 자동 흐름(LDAP 복원·설정체크+설정수정)으로 되돌림 (CLI: auto_setup request release)",
+		"               u (6) 보류 해제 - 보류 호스트가 있을 때만 보임. 늦은 READY 로 보류된 호스트(전체 보기면 job 전체)를 y 확인 후 자동 흐름(LDAP 비교·설정체크+설정수정, 복원은 l 명령)으로 되돌림 (CLI: auto_setup request release)",
+		"               l (7) LDAP 복원 - 메뉴에는 복원 대기 호스트가 있을 때만 보임(l 키는 언제나 동작). READY 직후에는 비교만 하고 복원이 필요하면 비고 'LDAP 복원 대기' 로 둡니다. y = 선택 호스트를 다시 비교 후 필요하면 복원, a = 이 그룹(전체 보기면 job 전체)의 복원 대기 호스트 복원 (CLI: auto_setup request ldap-restore, conf ldap_auto_restore=y 면 자동)",
 		"               * 배포 → 완료까지의 자동 흐름은 항상 '설정체크 + 설정수정' 입니다 (설정체크만은 수동 t 로만)",
 		"   w           AWX 메뉴 (화면 1·2 어디서나)",
 		"               1 AWX 실행 - w / Enter / 1 중 아무 키 (그래서 ww 가 예전의 w). (auto 여부·프로파일) → user → 작업 대상 서버 목록(Ctrl+D) → awx_dir 의 01 을 이 터미널에서 실행 (취소: Ctrl+X 즉시)",

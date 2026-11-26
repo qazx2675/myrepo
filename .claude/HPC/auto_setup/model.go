@@ -458,6 +458,27 @@ func snapHost(name string, h *Host, now int64) SnapHost {
 	return sh
 }
 
+// ldapRestoredNote: 복원을 마친 호스트의 비고 — 서비스 재시작 실패가 있으면 그 내용, 변환했으면 방향(7→8 / 8→7) 표시
+func ldapRestoredNote(reason string) string {
+	for _, n := range strings.Split(reason, "; ") {
+		if strings.HasPrefix(n, "서비스 재시작 실패") {
+			return "LDAP 복원(" + n + ")"
+		}
+	}
+	if strings.Contains(reason, "변환 ") {
+		to8 := strings.Contains(reason, "→sssd.conf") || strings.Contains(reason, "→chrony.conf")
+		to7 := strings.Contains(reason, "→nslcd.conf") || strings.Contains(reason, "→ntp.conf")
+		switch {
+		case to7 && !to8:
+			return "LDAP 복원(8→7 변환)"
+		case to8 && !to7:
+			return "LDAP 복원(7→8 변환)"
+		}
+		return "LDAP 복원(변환)"
+	}
+	return "LDAP 복원"
+}
+
 // hostNote: 비고 (고정 순서, ", " 구분). bindpw·binddn 값은 다루지 않는다.
 func hostNote(h *Host) string {
 	var p []string
@@ -481,17 +502,25 @@ func hostNote(h *Host) string {
 		switch {
 		case h.Ldap.Backup != LdapBackupOK:
 			p = append(p, "LDAP 백업없음")
+		case h.Ldap.Bindpw == "": // 백업만 되고 비교 전
+			p = append(p, "LDAP 백업됨")
 		case h.Ldap.Bindpw == BindpwSame:
 			p = append(p, "LDAP binddn 동일")
+		case h.Ldap.Bindpw == BindpwUnknown: // 비교 전에 실패 — binddn 이 다르다는 뜻이 아니다
+			p = append(p, "LDAP 확인실패("+strings.TrimSuffix(h.Ldap.Reason, "(수동 확인)")+")")
 		case h.Ldap.Bindpw == BindpwDiff && h.Ldap.Applied:
-			p = append(p, "LDAP 복원")
+			p = append(p, ldapRestoredNote(h.Ldap.Reason))
 		case h.Ldap.Bindpw == BindpwDiff && strings.HasPrefix(h.Ldap.Reason, ldapManualPrefix):
 			p = append(p, "LDAP 수동 복원 필요")
+		case ldapPending(h.Ldap): // 비교만 하고 복원은 명령(request ldap-restore·TUI l)을 기다리는 중 — 적용실패가 아님
+			p = append(p, "LDAP 복원 대기")
 		case h.Ldap.Bindpw == BindpwDiff:
 			p = append(p, "LDAP 적용실패")
 		case h.Ldap.Bindpw == BindpwNA:
 			p = append(p, "LDAP binddn 확인불가")
 		}
+	} else if active(h) && ldapFeatureOn() { // 아직 백업을 시도하지 않음
+		p = append(p, "LDAP 백업 대기")
 	}
 	switch h.Second {
 	case SecondRunning:

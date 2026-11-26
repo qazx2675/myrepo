@@ -55,7 +55,7 @@
 | `os6run_tui.go` | os6_mgmt(원격 클라이언트) TUI 의 `g`·`c`·`t` 를 이 서버에서 바로 실행(데몬 없이 TUI 안에서 1회, `realRunner` 재사용·hasOS6=false), 진행·결과 보기, 실행 중 종료 막기 | 0.8.x, `newOS6Runner`·`newOS6Checker` 주입 |
 | `os6_truble.sh` | os6_mgmt 경유 장애 점검(읽기 전용, os8_mgmt 에서 root): conf·이름·ssh 시간/원인 분류·로그인 셸·os6_autosetup/gossh·sshd 한도·병렬 접속·데몬 로그. 원인 분류 규칙은 `check.go` `sshReasons` 와 같은 문구 | 0.8.x |
 | `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel / refresh / recheck(g 재확인: os8 → os6)), 수동 run 스케줄. 수거 전 `claimRequest` 로 `requests/claimed/` 에 rename 선점 (데몬이 둘이어도 1회 처리) | 2차 |
-| `ldapbk.go` | LDAP 백업(전달 시점)·binddn uid 비교·공유경로(`ldap_share_dir`) 경유 백업 세트 복원 | 2차 |
+| `ldapbk.go` | LDAP 백업(전달 시점)·binddn uid 비교(`Probe`, 읽기 전용)·공유경로(`ldap_share_dir`) 경유 백업 세트 복원(`Restore`) — 비교·복원 계획은 `ldapCompare` 공용 | 2차 |
 | `hang.go` | gossh hang 감시: `hang_min` 넘은 호출에 SIGINT×2, +1분 뒤 SIGTERM (os6 래퍼는 SIGUSR1/2 로 원격 취소 중계), `max_runs` 병렬 run 풀과 함께 동작 | 설정체크 |
 | `second.go` | 2차(이중) 체크: os6_mgmt 실행·결과 회수·code 섹션 병합 | 2차 |
 | `iface.go` | Pinger/Checker/Runner/Notifier/Clock + (2차) LdapBackup/Second 인터페이스 | 테스트 주입점 |
@@ -100,7 +100,7 @@
 │   ├── active/            #   수락된 manual-run (run 이 끝나면 삭제)
 │   └── rejected/          #   거부된 요청 (마지막 줄 reason=, 정리 정책 없음)
 ├── ldapbak/               # (2차) LDAP 백업 (0700, 자동 삭제 안 됨, bindpw 포함 원본)
-│   └── <jobid>/<host>/    #   ldap.conf resolv.conf nslcd|sssd.conf ntp|chrony.conf, meta.json (파일 0600)
+│   └── <jobid>/<host>/    #   ldap.conf resolv.conf autofs.conf autofs_ldap_auth.conf nslcd|sssd.conf ntp|chrony.conf, meta.json (파일 0600)
 ├── changes/               # (0.7.0) m 변경 메뉴 기록: <user>/<YYYYmmddHHMMSS>_<kind>.json (디렉터리 0700, 파일 0600, 자동 삭제 안 됨)
 ├── recheck/               # (0.4.7) g 재확인 진행 기록: <jobid>.json (TUI 진행 창이 읽음)
 ├── newhost/               # (0.8.0) 신규 설치 양식: <user>/{templates, backup/<시각>.txt, history/<시각>.txt} (0700/0600, 자동 삭제 안 됨)
@@ -188,7 +188,7 @@
 | 설치중 | `installing` | anaconda 확인됨 |
 | 부팅확인 | `booting` | seen_down 후 ping O, READY 아님 |
 | READY | `ready` | 새 OS 부팅 확인, run 대기 |
-| LDAP확인 | `ldap` | READY 직후 LDAP 비교·복원 중 |
+| LDAP확인 | `ldap` | READY 직후 LDAP 비교 중 (conf `ldap_auto_restore=y` 면 비교·복원) |
 | 체크중 / 2차체크 | `checking` / `second` | os_check run / 2차 체크 진행 중 |
 | 완료 | `done` | processed (run / 완료기록 / 수동) |
 | 정체 | `stuck` | seen_down 후 `installStuck`(60분)을 넘겨도 READY 안 됨 (`effectiveStage`, 데몬이 없어도 계산) |
@@ -199,7 +199,7 @@
 
 ### 요청 채널 (requests.go)
 
-`writeRequest()` 가 `requests/<epoch>_<kind>.req`(key=value 줄)를 임시파일 → link 로 원자 기록 → 데몬이 `collectRequests()` 로 수거. `manual-run` 은 완료 여부와 상관없이 수락(접속불가는 wall 에 표시)(→ `requests/active/`, run 큐에서 `scheduleManual()` 이 자동 run 이 없을 때 실행), 거부는 `requests/rejected/<같은 이름>` + 마지막 `reason=` 줄. `cancel` 은 `auto_setup cancel` 과 동일. `release`(jobid, yml|`*`)는 늦은 READY 보류 해제(`releaseHold`, 보류 호스트가 없으면 거부) — TUI `h`→`u`, CLI·원격 중계 `request release`.
+`writeRequest()` 가 `requests/<epoch>_<kind>.req`(key=value 줄)를 임시파일 → link 로 원자 기록 → 데몬이 `collectRequests()` 로 수거. `manual-run` 은 완료 여부와 상관없이 수락(접속불가는 wall 에 표시)(→ `requests/active/`, run 큐에서 `scheduleManual()` 이 자동 run 이 없을 때 실행), 거부는 `requests/rejected/<같은 이름>` + 마지막 `reason=` 줄. `cancel` 은 `auto_setup cancel` 과 동일. `release`(jobid, yml|`*`)는 늦은 READY 보류 해제(`releaseHold`, 보류 호스트가 없으면 거부) — TUI `h`→`u`, CLI·원격 중계 `request release`. `ldap-restore`(jobid, yml 키에 호스트|그룹|`*`)는 LDAP 복원(`ldapRestoreReq` → `LdapBackup.Restore`) — `*`·그룹은 `ldapPending` 호스트만, 호스트 지정은 다시 비교 후 복원, 종료된 job(jobs/done)도 대상, 실행 중 run·os6 직접 실행 호스트는 건너뜀. 대상이 없으면 거부 — TUI `l`, CLI·원격 중계 `request ldap-restore`.
 
 ### 완료기록 (done.go ↔ os_check)
 
@@ -215,8 +215,12 @@
 
 ### LDAP 백업/복원 (ldapbk.go, daemon.go `ldapBackup`/`ldapApply`)
 
-- 백업: job 수거 직후 ping O·seen_down 아님 호스트에 gossh 로 파일 수집 → `ldapbak/<jobid>/<host>/`(0700/0600). 대상은 `lbFilePaths` 표(ldap.conf·resolv.conf·nslcd.conf·sssd.conf·ntp.conf·chrony.conf), OS·s4 분기는 `detectScript()`.
-- 복원: READY 직후 os_check 전에 새 OS `ldap.conf` 의 `binddn` 줄에서 `uid=<값>` 의 값만 뽑아(`binddnSnippet` awk = Go `binddnUID`, bindpw 는 원격에서 읽지·출력하지 않음) 백업본과 비교 → `same` 생략 / `diff` 면 `ldap_share_dir` 가 있을 때 `stageShare()` 가 `<ldap_share_dir>/.as_ldap_<crypto/rand 16바이트 hex>/<호스트>/` (0700, 파일 0600)에 백업 세트를 두고, gossh 명령(`restoreScript()`)에는 경로·mode·owner·group·서비스명만 실어 대상이 `cat` 으로 읽어 쓴다(restorecon, 서비스 재시작, 복원 후 binddn uid 재확인). 끝나면 성공·실패 모두 `defer os.RemoveAll` 로 공유 임시 디렉터리 즉시 삭제. 대상이 공유경로를 못 읽으면 `공유경로 접근 실패`(스크립트가 `==SHARE err` 로 종료, 아무것도 안 바꿈). `ldap_share_dir` 가 비면 복원하지 않고 `수동 복원 필요(ldap_share_dir 미설정, 백업: <경로>)`. binddn uid 를 한쪽이라도 못 읽으면 `na`(`binddn 확인불가`). 명령줄·로그·상태·meta.json 어디에도 bindpw 가 없다(`ldapApplyTimeout` 45초).
+- 백업: job 수거 직후 ping O·seen_down 아님 호스트에 gossh 로 파일 수집 → `ldapbak/<jobid>/<host>/`(0700/0600). 대상은 `lbFilePaths` 표(ldap.conf·resolv.conf·autofs.conf·autofs_ldap_auth.conf·nslcd.conf·sssd.conf·ntp.conf·chrony.conf; 필수는 ldap.conf 뿐, 없는 파일은 건너뜀), OS·s4 분기는 `detectScript()`.
+- 백업 재시도·확정 규칙 (`ldapBackup(now)`): 후보는 `h.Ldap==nil`·미처리·seen_down 아님·**전달 직후 단계**(`deliveryStage`: ReadyAt=0 이고 stage 가 ""/queued/deploying)·ping O(또는 os6 막 판별 `ldapNow`)·**재기동 직후 준비확인(`startCheck`) 끝남**·재시도 대기 시각 지남. 일시적 실패(`ldapTransient`: 사유가 `무응답`·`수집 호출 실패` 로 시작 — gossh 접속 실패 사유는 `무응답: SSH 접속 실패: …`, 출력 없는 시간 초과는 `수집 호출 실패: 시간 초과`)는 확정하지 않고 `hostRT`(메모리, 재기동 시 초기화)에 횟수·사유를 두고 `ldapRetryGap`(60초) 뒤 재시도, `ldapRetryMax`(10회)째도 실패면 그 사유로 `none`. 재시도 중 seen_down 이 되면 `전달 시점 ping X` 대신 마지막 사유로 `none` 확정. 영구 사유(`OS 판별 불가`·`ldap.conf 없음`·`저장 실패`·`백업 실패`)는 즉시 확정. READY 이후(ping X 를 못 본 빠른 재부팅·NoPing/수동 재시도 확인 경로) 호스트는 새 OS 설정일 수 있어 수집하지 않고 `ldapApply`(READY 직후)·`ldapBackup` 이 `{backup:none, 전달 시점 백업 없음}`(재시도 사유가 있으면 그 사유)으로 명시 기록.
+- 같은 호스트 재전달 (`addJob` → `ldapInherit`): 이전 진행 중 job 에서 호스트를 옮길 때 이전 `h.Ldap.Backup==ok` 이고 `ldapbak/<이전job>/<host>/meta.json` 이 있으면 디렉터리를 `ldapbak/<새job>/<host>` 로 옮기고(`moveBackup`, os.Rename) 새 job 호스트에 `{backup:ok}` 만 넘긴다(비교·적용은 새 job 에서 다시). 이어받으면 새로 백업하지 않는다. 옮기지 못하면 로그만 남기고 종전처럼 새로 백업.
+- **복원은 명령으로만**: `LdapBackup` 은 `Probe`(비교만) / `Restore`(비교 후 필요하면 복원) 두 갈래이고 둘 다 `ldapCompare`(백업 로드·probe gossh 1회(+os6 경유 1회)·조건 판정·복원 세트(7↔8 변환) 준비, 원격 쓰기 없음)를 쓴다. 다른 진입점(ldap-test)이 job·ldapbak 없이 쓰도록 하위 함수로 나뉜다: `collectHosts(hosts, route)`(호스트 목록 수집, local 무응답은 os6 경유 — `Backup` 이 저장 전에 호출) · `compareEntries(route, host, bakDir, entries)`(probe·조건 판정·복원 세트 준비, 응답한 경로 반환 — `ldapCompare` 가 백업 로드 후 호출하고 os6 경유면 job 경로 갱신) · `convertEntriesFor(entries, auth, time)`(백업 세트를 대상 OS 종류용 파일 세트로 변환) · `restoreEntries(host, plan)`(공유경로 stage→복원→서비스 재시작→binddn 확인 — `Restore` 가 호출). `ldapApply`/`ldapApplyNow`(READY 직후·보류 호스트 수동 run 직전)는 conf `ldap_auto_restore`(`ldapAutoRestore`, 기본 꺼짐)가 꺼져 있으면 `Probe` — 복원 필요면 `pendingState`(`bindpw=diff`·`applied=false`·Reason 머리말 `ldapPendingPrefix` = `복원 대기(명령 필요)`, 비고 `LDAP 복원 대기`, 화면 2 키 안내 `l LDAP 복원(대기 N)`·h 메뉴 `l`)로 두고 로그에 복원 명령을 안내, 켜져 있으면 `Restore`. 이미 비교한(`Bindpw!=""`) 호스트는 다시 비교하지 않는다. 복원은 `request ldap-restore`(위 요청 채널)로만.
+- gossh 호출 상한: local(os8)·os6 경로 모두 `sshLimit(timeout)` (conf `ssh_timeout` 반영, 기본 30초면 백업 130초·적용 85초). `gosshBatchWhy` 가 `parseGossh` 의 호스트별 `Why`(gossh 접속 오류 줄)를 함께 돌려주며 원격 파일 내용은 사유에 들어가지 않는다.
+- 복원: READY 직후 os_check 전에 새 OS `ldap.conf` 의 `binddn` 줄에서 `uid=<값>` 의 값만 뽑아(`binddnSnippet` awk = Go `binddnUID`, bindpw 는 원격에서 읽지·출력하지 않음) 백업본과 비교 → uid 같고 auth/time 종류도 같으면 `same` 생략 / uid 다름·종류 다름(7↔8)·새 OS binddn uid 없음이면 `diff` 로 복원: `ldap_share_dir` 가 있을 때 `stageShare()` 가 `<ldap_share_dir>/.as_ldap_<crypto/rand 16바이트 hex>/<호스트>/` (0700, 파일 0600)에 백업 세트를 두고, gossh 명령(`restoreScript()`)에는 경로·mode·owner·group·서비스명만 실어 대상이 `cat` 으로 읽어 쓴다(restorecon, 서비스 재시작, 복원 후 binddn uid 재확인). 끝나면 성공·실패 모두 `defer os.RemoveAll` 로 공유 임시 디렉터리 즉시 삭제. 대상이 공유경로를 못 읽으면 `공유경로 접근 실패`(스크립트가 `==SHARE err` 로 종료, 아무것도 안 바꿈). `ldap_share_dir` 가 비면 복원하지 않고 `수동 복원 필요(ldap_share_dir 미설정, 백업: <경로>)`. 종류가 다른 auth/time 파일은 `lbConvert` 양방향 표(7→8: nslcd.conf→sssd.conf 0600, ntp.conf→chrony.conf 0644 / 8→7: sssd.conf→nslcd.conf 0600, chrony.conf→ntp.conf 0644, root:root; 순수 함수 `nslcdToSSSD`/`ntpToChrony`/`sssdToNslcd`/`chronyToNtp`)로 변환해 새 OS 경로에 쓰고(원래 파일은 쓰지 않음), 변환 오류는 `변환 실패: <파일>`(오류 내용 미기록)로 아무것도 바꾸지 않는다. 성공 사유는 Reason 에(`OS 종류 변경`·`새 OS binddn 없음`·`변환 …`). 백업 쪽 binddn uid 를 못 읽으면 `na`(`binddn 확인불가`). 명령줄·로그·상태·meta.json 어디에도 bindpw 가 없다(`ldapApplyTimeout` 45초).
 
 ### 2차(이중) 체크 (second.go, daemon.go `selectSecondTargets`)
 

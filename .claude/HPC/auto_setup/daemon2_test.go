@@ -88,14 +88,25 @@ func (f fakeLdap) Backup(j *Job, hosts []string) map[string]LdapState {
 	return out
 }
 
-func (f fakeLdap) Apply(j *Job, host string) LdapState {
-	f.x.ev("apply %s@%d", host, f.x.off())
+// Probe: 비교만 (READY 직후 기본) — 복원이 필요하다고 보고 '복원 대기' 를 돌려준다
+func (f fakeLdap) Probe(j *Job, host string) LdapState {
+	f.record("probe", j, host)
+	return pendingState(nil)
+}
+
+// Restore: 비교 후 복원 (ldap_auto_restore=y 의 READY 직후·request ldap-restore)
+func (f fakeLdap) Restore(j *Job, host string) LdapState {
+	f.record("apply", j, host)
+	return LdapState{Bindpw: BindpwDiff, Applied: true}
+}
+
+func (f fakeLdap) record(kind string, j *Job, host string) {
+	f.x.ev("%s %s@%d", kind, host, f.x.off())
 	if dj, err := loadJobFile(jobFile(j.ID)); err == nil {
 		f.x.mu.Lock()
 		f.x.applyDisk[host] = dj.Hosts[host].Stage
 		f.x.mu.Unlock()
 	}
-	return LdapState{Bindpw: BindpwDiff, Applied: true}
 }
 
 func newXDaemon(x *xworld, ldap bool, second bool) *Daemon {
@@ -125,8 +136,19 @@ func withOS6(t *testing.T, mgmt, osCheck string) {
 	t.Cleanup(func() { os6_mgmt, os6_os_check_sh = a, b })
 }
 
-// stage 전이 전체 + LDAP: 백업은 전달 직후 ping O 호스트만 1회, 적용은 READY 직후·run 전(디스크 stage=ldap)
+// stage 전이 전체 + LDAP: 백업은 전달 직후 ping O 호스트만 1회, 확인은 READY 직후·run 전(디스크 stage=ldap).
+// 기본(ldap_auto_restore 꺼짐)은 비교만(probe) → 복원 대기로 두고 run 은 그대로 진행, request ldap-restore 로 복원(apply).
+// ldap_auto_restore=y 면 READY 직후 비교 후 바로 복원(apply).
 func TestStageTransitionsAndLdap(t *testing.T) {
+	for _, auto := range []string{"", "y"} {
+		t.Run("ldap_auto_restore="+auto, func(t *testing.T) { testStageTransitionsAndLdap(t, auto) })
+	}
+}
+
+func testStageTransitionsAndLdap(t *testing.T, auto string) {
+	old := ldap_auto_restore
+	ldap_auto_restore = auto
+	t.Cleanup(func() { ldap_auto_restore = old })
 	setupDir(t)
 	x := newX(map[string]*simHost{"h1": install(60, 125, 400, 600), "h2": install(0, 125, 400, 600)})
 	id := submit(t, "u1", 0, "h1", "h2")
@@ -143,7 +165,11 @@ func TestStageTransitionsAndLdap(t *testing.T) {
 		t.Fatalf("h1 stage 전이 불일치\n got: %v\nwant: %v", seq, want)
 	}
 	ev := x.Events()
-	wantEv := []string{"backup h1@0", "apply h1@600", "run h1,h2@600"}
+	kind, wantLdap := "probe", &LdapState{Backup: LdapBackupOK, Bindpw: BindpwDiff, Reason: ldapPendingPrefix}
+	if auto == "y" {
+		kind, wantLdap = "apply", &LdapState{Backup: LdapBackupOK, Bindpw: BindpwDiff, Applied: true}
+	}
+	wantEv := []string{"backup h1@0", kind + " h1@600", "run h1,h2@600"}
 	if !reflect.DeepEqual(ev, wantEv) {
 		t.Fatalf("LDAP 호출 순서 불일치\n got: %v\nwant: %v", ev, wantEv)
 	}
@@ -152,7 +178,7 @@ func TestStageTransitionsAndLdap(t *testing.T) {
 	}
 	j := doneJob(t, id)
 	h1, h2 := j.Hosts["h1"], j.Hosts["h2"]
-	if !reflect.DeepEqual(h1.Ldap, &LdapState{Backup: LdapBackupOK, Bindpw: BindpwDiff, Applied: true}) {
+	if !reflect.DeepEqual(h1.Ldap, wantLdap) {
 		t.Fatalf("h1 ldap 이상: %+v", h1.Ldap)
 	}
 	if h2.Ldap == nil || h2.Ldap.Backup != LdapBackupNone {
@@ -160,6 +186,26 @@ func TestStageTransitionsAndLdap(t *testing.T) {
 	}
 	if h1.DownAt != base+70 || h1.BootAt != base+600 || h1.StageAt != base+605 || h1.DoneSrc != DoneSrcRun {
 		t.Fatalf("h1 시각/출처 이상: %+v", h1)
+	}
+	if auto == "y" {
+		return
+	}
+	// 복원은 명령으로: 종료된 job 도 request ldap-restore '*' → 복원 대기 호스트(h1)만 복원, 백업 none(h2)은 건너뜀
+	if _, err := writeRequest(ReqLdapRestore, map[string]string{"jobid": id, "yml": "*"}); err != nil {
+		t.Fatal(err)
+	}
+	d = drive(t, x.world, d, 705, 705)
+	if ev := x.Events(); !reflect.DeepEqual(ev, append(wantEv, "apply h1@705")) {
+		t.Fatalf("ldap-restore 요청 뒤 호출: %v", ev)
+	}
+	if l := doneJob(t, id).Hosts["h1"].Ldap; !reflect.DeepEqual(l, &LdapState{Backup: LdapBackupOK, Bindpw: BindpwDiff, Applied: true}) {
+		t.Fatalf("복원 뒤 h1 ldap(jobs/done): %+v", l)
+	}
+	if lg, _ := os.ReadFile(logPath()); !strings.Contains(string(lg), "LDAP 복원(요청): h1 (job "+id+") binddn=diff applied=true") {
+		t.Fatalf("복원 로그 없음:\n%s", lg)
+	}
+	if names := listReqFiles(requestsDir()); len(names) != 0 {
+		t.Fatalf("요청이 처리되지 않음: %v", names)
 	}
 }
 
@@ -401,5 +447,205 @@ func TestStopDaemonTimeoutNoKill(t *testing.T) {
 	}
 	if !processAlive(cmd.Process.Pid) {
 		t.Fatal("SIGKILL 을 보내면 안 됨 (프로세스가 살아 있어야 함)")
+	}
+}
+
+// retryLdap: 호스트별 okAt 오프셋부터 ok(ldapbak 에 meta.json 저장), 그 전(또는 okAt 없음)은 일시적 실패("무응답: SSH 접속 실패: …").
+// Backup 호출을 "호스트@오프셋" 으로 기록
+type retryLdap struct {
+	w       *world
+	mu      sync.Mutex
+	okAt    map[string]int64
+	calls   []string
+	applied []string
+}
+
+const retryWhy = ldapNoResp + ": SSH 접속 실패: connection refused"
+
+func (l *retryLdap) Backup(j *Job, hosts []string) map[string]LdapState {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	o := l.w.off()
+	out := map[string]LdapState{}
+	for _, h := range hosts {
+		l.calls = append(l.calls, fmt.Sprintf("%s@%d", h, o))
+		if at, ok := l.okAt[h]; ok && o >= at {
+			in := lbInfo{Files: []lbEntry{{Name: "ldap.conf", Mode: "0644", Owner: "root", Group: "root", Data: []byte("BINDDN uid=a,dc=x\n")}}}
+			if err := saveBackup(j.ID, h, in); err != nil {
+				out[h] = noneState("저장 실패")
+				continue
+			}
+			out[h] = LdapState{Backup: LdapBackupOK}
+			continue
+		}
+		out[h] = noneState(retryWhy)
+	}
+	return out
+}
+
+func (l *retryLdap) Probe(j *Job, host string) LdapState { return l.Restore(j, host) }
+
+func (l *retryLdap) Restore(_ *Job, host string) LdapState {
+	l.mu.Lock()
+	l.applied = append(l.applied, host)
+	l.mu.Unlock()
+	return LdapState{Backup: LdapBackupOK, Bindpw: BindpwSame}
+}
+
+func (l *retryLdap) Calls() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]string(nil), l.calls...)
+}
+
+func withLdapRetry(t *testing.T, max int) {
+	t.Helper()
+	a, b := ldapRetryMax, ldapRetryGap
+	ldapRetryMax, ldapRetryGap = max, 60*time.Second
+	t.Cleanup(func() { ldapRetryMax, ldapRetryGap = a, b })
+}
+
+// 일시적 실패(무응답·수집 호출 실패)는 none 으로 확정하지 않고 ldapRetryGap(60초) 뒤 다시 시도 → 성공하면 ok
+func TestLdapBackupRetryAfterTransient(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "", "")
+	withLdapRetry(t, 10)
+	w := newWorld(map[string]*simHost{"h1": oldOS()})
+	l := &retryLdap{w: w, okAt: map[string]int64{"h1": 30}}
+	id := submit(t, "u1", 0, "h1")
+	d := newTestDaemon(w)
+	d.Ldap = l
+	d = drive(t, w, d, 0, 150)
+	if got := strings.Join(l.Calls(), " "); got != "h1@0 h1@60" {
+		t.Fatalf("재시도 호출 불일치: %s (0 실패 → 60 재시도 성공, 그 뒤 호출 없음)", got)
+	}
+	if st := d.jobs[id].Hosts["h1"].Ldap; !reflect.DeepEqual(st, &LdapState{Backup: LdapBackupOK}) {
+		t.Fatalf("재시도 성공 뒤 ok 여야 함: %+v", st)
+	}
+	if !strings.Contains(holdLog(t), "LDAP 백업 재시도 예정: h1") {
+		t.Fatal("재시도 예정 로그 없음")
+	}
+}
+
+// 재시도 중 seen_down(설치 시작) 이 되면 그때 마지막 사유로 none 확정 (더 시도하지 않음)
+func TestLdapBackupSeenDownKeepsReason(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "", "")
+	withLdapRetry(t, 10)
+	w := newWorld(map[string]*simHost{"h1": install(30, 1000, 2000, 3000)})
+	l := &retryLdap{w: w}
+	id := submit(t, "u1", 0, "h1")
+	d := newTestDaemon(w)
+	d.Ldap = l
+	d = drive(t, w, d, 0, 200)
+	if got := strings.Join(l.Calls(), " "); got != "h1@0" {
+		t.Fatalf("seen_down 뒤에는 재시도하지 않아야 함: %s", got)
+	}
+	h := d.jobs[id].Hosts["h1"]
+	if !h.SeenDown || !reflect.DeepEqual(h.Ldap, &LdapState{Backup: LdapBackupNone, Reason: retryWhy}) {
+		t.Fatalf("seen_down 뒤 none(사유 유지) 여야 함: seen_down=%v %+v", h.SeenDown, h.Ldap)
+	}
+}
+
+// 상한(ldapRetryMax) 회 모두 일시적 실패면 마지막 사유로 none 확정, 이후 호출 없음
+func TestLdapBackupRetryLimit(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "", "")
+	withLdapRetry(t, 3)
+	w := newWorld(map[string]*simHost{"h1": oldOS()})
+	l := &retryLdap{w: w}
+	id := submit(t, "u1", 0, "h1")
+	d := newTestDaemon(w)
+	d.Ldap = l
+	d = drive(t, w, d, 0, 400)
+	if got := strings.Join(l.Calls(), " "); got != "h1@0 h1@60 h1@120" {
+		t.Fatalf("상한 3회 호출 불일치: %s", got)
+	}
+	if st := d.jobs[id].Hosts["h1"].Ldap; !reflect.DeepEqual(st, &LdapState{Backup: LdapBackupNone, Reason: retryWhy}) {
+		t.Fatalf("상한 뒤 none(사유 유지) 여야 함: %+v", st)
+	}
+}
+
+// READY 이후(NoPing·수동 재시도 확인 등으로 ping X 를 못 본) 호스트·설치 진행 이후 단계·재기동 직후 준비확인 전 호스트는
+// 백업 후보가 아니다. READY 호스트는 "전달 시점 백업 없음" 으로 명시 기록 (ldapApply 도 조용히 건너뛰지 않음)
+func TestLdapBackupSkipsReadyHosts(t *testing.T) {
+	setupDir(t)
+	w := newWorld(map[string]*simHost{})
+	l := &retryLdap{w: w, okAt: map[string]int64{"rdy": 0, "chk": 0, "rst": 0, "q": 0, "rdy2": 0}}
+	d := &Daemon{Clock: w.clock, Ldap: l}
+	d.init()
+	j := &Job{ID: "j1", Submitted: base, Hosts: map[string]*Host{
+		"rdy":  {Route: "local", ReadyAt: base + 50, Stage: string(StageReady)},
+		"chk":  {Route: "local", Stage: string(StageChecking)},
+		"rst":  {Route: "local", Stage: string(StageQueued)},
+		"q":    {Route: "local", Stage: string(StageQueued)},
+		"rdy2": {Route: "local", Stage: string(StageQueued)},
+	}}
+	d.jobs[j.ID] = j
+	for n := range j.Hosts {
+		d.hrt(n).up = true
+	}
+	d.rt["rst"].startCheck = true                  // 재기동 직후: 기동 직후 준비확인이 READY 여부를 정하기 전
+	d.rt["rdy2"].ldapNext = time.Unix(base+200, 0) // 재시도 대기 중
+	d.ldapBackup(time.Unix(base+100, 0))
+	if got := strings.Join(l.Calls(), " "); got != "q@0" {
+		t.Fatalf("백업 후보는 전달 직후 단계(q)뿐이어야 함: %s", got)
+	}
+	want := map[string]*LdapState{"rdy": {Backup: LdapBackupNone, Reason: "전달 시점 백업 없음"}, "chk": nil, "rst": nil,
+		"q": {Backup: LdapBackupOK}, "rdy2": nil}
+	for n, st := range want {
+		if !reflect.DeepEqual(j.Hosts[n].Ldap, st) {
+			t.Fatalf("%s: %+v, want %+v", n, j.Hosts[n].Ldap, st)
+		}
+	}
+	// 재시도 대기 중이던 호스트가 그대로 READY → ldapApply 가 마지막 사유로 none 기록, Probe·Restore 는 호출하지 않음
+	d.rt["rdy2"].ldapWhy = retryWhy
+	j.Hosts["rdy2"].ReadyAt = base + 150
+	d.ldapApply(j, "rdy2", base+150)
+	if !reflect.DeepEqual(j.Hosts["rdy2"].Ldap, &LdapState{Backup: LdapBackupNone, Reason: retryWhy}) || len(l.applied) != 0 {
+		t.Fatalf("READY 시 기록 이상: %+v applied=%v", j.Hosts["rdy2"].Ldap, l.applied)
+	}
+	// 사유 없이 READY (재시도 기록 없음) → "전달 시점 백업 없음"
+	j.Hosts["chk"].ReadyAt = base + 160
+	d.ldapApply(j, "chk", base+160)
+	if !reflect.DeepEqual(j.Hosts["chk"].Ldap, &LdapState{Backup: LdapBackupNone, Reason: "전달 시점 백업 없음"}) {
+		t.Fatalf("READY 시 기록 이상: %+v", j.Hosts["chk"].Ldap)
+	}
+}
+
+// 같은 호스트 재전달: 이전 job 의 전달 시점 백업(ok)을 새 job 으로 옮겨 이어받고 새로 백업하지 않는다
+func TestLdapBackupInheritOnRedeliver(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "", "")
+	w := newWorld(map[string]*simHost{"h1": oldOS(), "h2": oldOS(), "h3": oldOS()})
+	l := &retryLdap{w: w, okAt: map[string]int64{"h1": 0, "h2": 0, "h3": 0}}
+	id1 := submit(t, "u1", 0, "h1", "h2")
+	d := newTestDaemon(w)
+	d.Ldap = l
+	d = drive(t, w, d, 0, 20)
+	id2 := submit(t, "u2", 30, "h1", "h3")
+	d = drive(t, w, d, 30, 60)
+	if got := strings.Join(l.Calls(), " "); got != "h1@0 h2@0 h3@30" {
+		t.Fatalf("이어받은 h1 은 다시 백업하지 않아야 함: %s", got)
+	}
+	if st := d.jobs[id2].Hosts["h1"].Ldap; !reflect.DeepEqual(st, &LdapState{Backup: LdapBackupOK}) {
+		t.Fatalf("새 job h1 ldap: %+v", st)
+	}
+	if _, ok := d.jobs[id1].Hosts["h1"]; ok {
+		t.Fatal("이전 job 에서 h1 이 빠져야 함")
+	}
+	newDir, _ := ldapHostDir(id2, "h1")
+	oldDir, _ := ldapHostDir(id1, "h1")
+	if _, err := os.Stat(filepath.Join(newDir, lbMetaName)); err != nil {
+		t.Fatalf("새 job 백업 디렉터리 없음: %v", err)
+	}
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatalf("이전 job 백업 디렉터리는 옮겨져야 함: %v", err)
+	}
+	if _, _, err := loadBackup(id2, "h1"); err != nil {
+		t.Fatalf("이어받은 백업 읽기: %v", err)
+	}
+	if dj := readJobFile(t, jobFile(id2)); dj.Hosts["h1"].Ldap == nil || dj.Hosts["h1"].Ldap.Backup != LdapBackupOK {
+		t.Fatalf("이어받은 ldap 이 저장되지 않음: %+v", dj.Hosts["h1"].Ldap)
 	}
 }

@@ -477,7 +477,7 @@ func TestAutoRefreshDoesNotBlockKeys(t *testing.T) {
 	done := make(chan int)
 	go func() { done <- runTUILoop(src, env) }()
 	tick <- time.Time{}
-	tick <- time.Time{} // 이전 갱신이 안 끝났으면 건너뛰어야 함 (막히지 않음)
+	tick <- time.Time{}               // 이전 갱신이 안 끝났으면 건너뛰어야 함 (막히지 않음)
 	pw.Write([]byte("\x1b[B\x1b[Aq")) // ↓↑ 후 종료
 	select {
 	case code := <-done:

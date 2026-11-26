@@ -79,7 +79,7 @@ func requestArgsOK(a []string) bool {
 	switch a[0] {
 	case ReqManualRun:
 		return len(a) == 3 || (len(a) == 4 && a[3] == ModeCheck)
-	case ReqRecheck, ReqRelease:
+	case ReqRecheck, ReqRelease, ReqLdapRestore:
 		return len(a) == 3
 	case ReqCancel:
 		return len(a) == 2
@@ -118,11 +118,11 @@ func cmdDone(hosts []string) int {
 	return 0
 }
 
-// cmdRequest: auto_setup request manual-run <jobid> <yml> | cancel <jobid> | refresh
+// cmdRequest: auto_setup request manual-run <jobid> <yml> | cancel <jobid> | refresh | ldap-restore <jobid> <호스트|yml|*>
 func cmdRequest(a []string) int {
 	var payload map[string]string
 	switch a[0] {
-	case ReqManualRun, ReqRecheck, ReqRelease:
+	case ReqManualRun, ReqRecheck, ReqRelease, ReqLdapRestore:
 		payload = map[string]string{"jobid": a[1], "yml": a[2]}
 		if a[0] == ReqManualRun && len(a) == 4 {
 			payload["mode"] = a[3]

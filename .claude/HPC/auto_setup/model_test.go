@@ -155,7 +155,7 @@ func TestSnapshotDeterministic(t *testing.T) {
 	if len(a.Hosts) != 1 || !a.Complete || a.Hosts[0].Note != "code 0001, LDAP 복원" || a.Hosts[0].Ldap == nil {
 		t.Fatalf("a.yml 이상: %+v", a)
 	}
-	if b.Complete || b.Hosts[0].Stage != StageInstalling || b.Hosts[0].Note != "os6경유" || b.Hosts[1].Note != "이름 미해결" || b.MaxElapsed != now.Unix()-1000 {
+	if b.Complete || b.Hosts[0].Stage != StageInstalling || b.Hosts[0].Note != "os6경유, LDAP 백업 대기" || b.Hosts[1].Note != "이름 미해결, LDAP 백업 대기" || b.MaxElapsed != now.Unix()-1000 {
 		t.Fatalf("b.yml 이상: %+v", b)
 	}
 	if j.Counts.Total != 4 || j.Counts.Done != 2 || j.Counts.Installing != 1 || j.Counts.Queued != 1 || s.Totals.Failed != 1 || s.Totals.Total != 5 {
