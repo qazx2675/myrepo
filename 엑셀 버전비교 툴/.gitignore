@@ -1,3 +1,4 @@
 results/
+excel-diff.log
 *.test
 tmp/

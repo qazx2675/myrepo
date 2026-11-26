@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>엑셀 버전비교</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>엑셀 버전비교</h1>
+  <p id="offline" class="error" hidden>프로그램과 연결이 끊어졌습니다. 이 창을 닫고 다시 실행하세요. 반복되면 실행 파일 옆의 excel-diff.log 를 확인하세요.</p>
+
+  <section class="files">
+    <div class="card" id="old">
+      <h2>① 이전 버전 파일</h2>
+      <input type="file" accept=".xlsx,.xlsm">
+      <progress max="100" hidden></progress>
+      <p class="status">파일을 선택하세요 (.xlsx, .xlsm)</p>
+    </div>
+    <div class="card" id="new">
+      <h2>② 최신 버전 파일</h2>
+      <input type="file" accept=".xlsx,.xlsm">
+      <progress max="100" hidden></progress>
+      <p class="status">파일을 선택하세요 (.xlsx, .xlsm)</p>
+    </div>
+  </section>
+
+  <section class="card" id="sheets" hidden>
+    <h2>시트 짝</h2>
+    <p class="hint">체크를 끄면 비교에서 제외합니다. 이름이 다른 시트는 '이전 시트'에서 직접 고르세요. 키 열은 행을 구분하는 값(예: ID)이 있는 열이며, 보통은 '자동'으로 충분합니다.</p>
+    <table>
+      <thead>
+        <tr>
+          <th><label><input type="checkbox" id="all" checked> 전체</label></th>
+          <th>이전 시트</th><th>최신 시트</th><th>이전 키 열</th><th>최신 키 열</th>
+        </tr>
+      </thead>
+      <tbody id="pairs"></tbody>
+    </table>
+  </section>
+
+  <p class="actions">
+    <button id="compare" class="primary" disabled>비교</button>
+    <span id="message" class="error"></span>
+  </p>
+
+  <section class="card" id="job" hidden>
+    <h2 id="jobTitle">진행 상황</h2>
+    <div id="running">
+      <progress id="bar" max="100"></progress>
+      <p><span id="stage"></span> · <span id="percent"></span> · 경과 <span id="elapsed"></span></p>
+    </div>
+    <p id="jobError" class="error"></p>
+    <div id="result" hidden>
+      <p class="actions">
+        <button id="openFile" class="primary">결과 열기</button>
+        <button id="openFolder">폴더 열기</button>
+        <span id="openMessage"></span>
+      </p>
+      <table id="summary"><tbody></tbody></table>
+      <div id="warningBox">
+        <h3 id="warningTitle"></h3>
+        <ul id="warnings"></ul>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
