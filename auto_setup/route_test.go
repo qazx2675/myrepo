@@ -202,7 +202,7 @@ func TestNoPingNote(t *testing.T) {
 		t.Fatalf("1분 전엔 표시 안 함: %q", n)
 	}
 	h.NoPing = now - 60
-	if n := snapHost("h1", h, now).Note; n != "os6경유, ping 정보없음(os6 probe 확인)" {
+	if n := snapHost("h1", h, now).Note; n != "os6경유, LDAP 백업 대기, ping 정보없음(os6 probe 확인)" {
 		t.Fatalf("비고: %q", n)
 	}
 }

@@ -20,7 +20,10 @@ const (
 	ReqCancel    = "cancel"     // payload: jobid=<id>            → auto_setup cancel 과 동일
 	ReqRefresh   = "refresh"    // payload: 없음                  → 다음 step 에서 ping·준비확인 즉시 수행 (TUI r 키)
 	ReqRecheck   = "recheck"    // payload: jobid=<id> yml=<그룹|*> → 완료 제외 호스트를 os8 → os6_mgmt 순으로 직접 재확인 (TUI g 키)
-	ReqRelease   = "release"    // payload: jobid=<id> yml=<그룹|*> → 늦은 READY 보류 호스트를 자동 흐름(LDAP 복원·자동 run)으로 되돌림 (TUI h→u)
+	ReqRelease   = "release"    // payload: jobid=<id> yml=<그룹|*> → 늦은 READY 보류 호스트를 자동 흐름(LDAP 비교·자동 run)으로 되돌림 (TUI h→u)
+	// payload: jobid=<id> yml=<호스트|그룹|*> → LDAP 백업 복원 (비교 후 필요하면 복원, TUI l). READY 직후에는 비교만 하므로 복원은 이 요청으로만
+	// (conf ldap_auto_restore=y 면 READY 직후 자동). 키 이름은 release 와 같은 yml 을 쓴다 (원격 중계·CLI 인자 처리 공용)
+	ReqLdapRestore = "ldap-restore"
 )
 
 // 디렉터리: requests/ (새 요청) → claimed/ (데몬이 선점해 처리 중, 처리 후 삭제) → active/ (수락된 manual-run, 끝나면 삭제) | rejected/ (거부, 끝에 reason= 줄)
@@ -183,6 +186,12 @@ func (d *Daemon) collectRequests(now time.Time) {
 				continue
 			}
 			os.Remove(p)
+		case ReqLdapRestore:
+			if reason := d.ldapRestoreReq(pl["jobid"], pl["yml"]); reason != "" {
+				rejectRequest(p, name, b, reason)
+				continue
+			}
+			os.Remove(p)
 		default:
 			rejectRequest(p, name, b, "알 수 없는 요청 종류")
 		}
@@ -247,7 +256,91 @@ func (d *Daemon) releaseHold(id, yml string, now time.Time) string {
 		return "보류된 호스트 없음"
 	}
 	d.lastCheck = time.Time{} // 이번 step 에서 바로 준비확인 → READY·LDAP·스케줄은 종전 흐름
-	logf("보류 해제: job %s 그룹 %s %d대 (%s) → 준비확인 뒤 자동 흐름(LDAP 복원·설정체크+설정수정)으로 진행", j.ID, yml, len(done), strings.Join(done, " "))
+	logf("보류 해제: job %s 그룹 %s %d대 (%s) → 준비확인 뒤 자동 흐름(LDAP 비교·설정체크+설정수정, 복원은 명령 또는 ldap_auto_restore=y)으로 진행", j.ID, yml, len(done), strings.Join(done, " "))
+	return ""
+}
+
+// ldapRestoreReq: LDAP 복원 요청(request ldap-restore, TUI l) — job 의 대상 호스트에 비교 후 필요하면 복원(Restore)한다.
+// target: "*" = job 전체, 그룹(yml) 이름 = 그 그룹, 그 밖에는 호스트 이름. 대상은 전달 시점 백업이 ok 이고 READY 를 거친(ready_at) 호스트이며,
+// "*"·yml 은 그중 '복원 대기(명령 필요)' 호스트만, 호스트를 지정하면 상태와 상관없이 다시 비교한 뒤 필요하면 복원한다(same 이면 그대로 same).
+// 실행 중인 run(수동 포함)·os6 직접 실행에 들어 있는 호스트는 건드리지 않고 사유를 로그에 남긴다 (끝난 뒤 다시 요청).
+// 진행 중 job 과 종료된 job(jobs/done) 모두 대상이며, 결과는 host.ldap(종료 job 은 jobs/done 파일)과 로그에 남는다. 처리했으면 "", 거부면 사유.
+func (d *Daemon) ldapRestoreReq(id, target string) string {
+	if id == "" || target == "" {
+		return "jobid/대상 없음"
+	}
+	if !d.ldapOn() {
+		return "LDAP 백업/복원이 꺼져 있음"
+	}
+	j, closed := d.findJob(id) // 모든 호스트가 끝나 종료(jobs/done)된 job 도 복원할 수 있다 (READY 뒤 run 은 복원을 기다리지 않으므로)
+	if j == nil {
+		return "job 없음"
+	}
+	var hosts []string
+	explicit := false
+	switch {
+	case target == "*":
+		for n := range j.Hosts {
+			hosts = append(hosts, n)
+		}
+	default:
+		if g, ok := groupHosts(j, target); ok {
+			hosts = g
+		} else if j.Hosts[target] != nil {
+			hosts, explicit = []string{target}, true
+		} else {
+			return "그룹·호스트 없음"
+		}
+	}
+	sort.Strings(hosts)
+	busy := d.busyHosts()
+	var did, skipped []string
+	for _, n := range hosts {
+		h := j.Hosts[n]
+		if h == nil || h.Ldap == nil || h.Ldap.Backup != LdapBackupOK || h.ReadyAt == 0 {
+			if explicit {
+				return "복원 대상 아님 (전달 시점 백업 ok 이고 READY 를 거친 호스트만)"
+			}
+			continue
+		}
+		if !explicit && !ldapPending(h.Ldap) {
+			continue
+		}
+		if busy[n] != nil || d.os6Hold[n] != "" {
+			skipped = append(skipped, n)
+			continue
+		}
+		st := d.Ldap.Restore(j, n)
+		if st.Backup == "" {
+			st.Backup = h.Ldap.Backup
+		}
+		h.Ldap = &st
+		if !closed { // 종료 job 은 아래에서 jobs/done 파일에 저장
+			d.dirty[j.ID] = true
+		}
+		msg := fmt.Sprintf("LDAP 복원(요청): %s (job %s) binddn=%s applied=%v", n, j.ID, st.Bindpw, st.Applied)
+		if st.Reason != "" {
+			msg += " (" + st.Reason + ")"
+		}
+		logf("%s", msg)
+		did = append(did, n)
+	}
+	if len(skipped) > 0 {
+		logf("[!] LDAP 복원 보류: job %s %d대는 실행 중인 run(수동 포함)·os6 직접 실행에 들어 있어 그대로 둠 — 끝난 뒤 다시 요청하세요 (%s)",
+			j.ID, len(skipped), strings.Join(skipped, " "))
+	}
+	if closed && len(did) > 0 {
+		if _, err := writeJobFile(filepath.Join(doneDir(), j.ID+".json"), j); err != nil {
+			logf("[X] job 저장 실패(%s): %v", j.ID, err)
+		}
+	}
+	if len(did) == 0 {
+		if len(skipped) > 0 {
+			return "대상 호스트가 모두 실행 중인 run·os6 직접 실행에 들어 있음 (끝난 뒤 다시 요청)"
+		}
+		return "복원 대기 호스트 없음"
+	}
+	logf("LDAP 복원 요청 처리: job %s 대상 %s %d대 (%s)", j.ID, target, len(did), strings.Join(did, " "))
 	return ""
 }
 

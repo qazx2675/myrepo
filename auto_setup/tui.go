@@ -429,7 +429,7 @@ func isMoveKey(ev keyEv) bool {
 // listScreen: 화면 1·2 목록만 보이는 상태 (다른 화면·메뉴·프롬프트 없음) — 이동 키가 키 처리에서 바로 위치를 보정하는 곳
 func (st *tuiState) listScreen() bool {
 	return st.nh == nil && st.wk == nil && st.chg == nil && st.chgMenu == nil && st.menu == nil && st.done == nil &&
-		st.awx == nil && st.oo == nil && st.view == nil && !st.help && !st.sel.Confirm && !st.sel.Release
+		st.awx == nil && st.oo == nil && st.view == nil && !st.help && !st.sel.Confirm && !st.sel.Release && !st.sel.LdapReq
 }
 
 func (st *tuiState) refresh() {
@@ -507,7 +507,7 @@ func (st *tuiState) clamp() {
 	if st.sel.Detail {
 		_, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
 		if g == nil {
-			st.sel.Detail, st.sel.Confirm, st.sel.Release, st.done = false, false, false, nil
+			st.sel.Detail, st.sel.Confirm, st.sel.Release, st.sel.LdapReq, st.done = false, false, false, false, nil
 			if st.menu != nil && st.menu.Open == 'h' { // 호스트 작업 메뉴도 함께 닫기 (w 메뉴는 화면 1 에서도 열리므로 유지)
 				st.menu = nil
 			}
@@ -628,6 +628,19 @@ func (st *tuiState) handle(ev keyEv) bool {
 		if ev.k == kRune && (ev.r == 'y' || ev.r == 'Y') {
 			st.requestRelease()
 		} else {
+			st.sel.Msg = "취소했습니다"
+		}
+		return false
+	}
+	if st.sel.LdapReq { // l 확인: y 선택 호스트 / a 그룹(전체 보기면 job 전체)의 복원 대기 / 그 밖의 키 취소
+		st.sel.LdapReq = false
+		_, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
+		switch {
+		case ev.k == kRune && (ev.r == 'y' || ev.r == 'Y') && st.sel.LdapHost != "":
+			st.requestLdapRestore(st.sel.LdapHost)
+		case ev.k == kRune && (ev.r == 'a' || ev.r == 'A') && g != nil && ldapPendingCount(g) > 0:
+			st.requestLdapRestore(st.sel.Yml) // 전체 보기면 allView("*") = job 전체
+		default:
 			st.sel.Msg = "취소했습니다"
 		}
 		return false
@@ -794,6 +807,8 @@ func (st *tuiState) handleDetail(ev keyEv) {
 		st.startDone()
 	case ev.k == kRune && (ev.r == 'u' || ev.r == 'U'):
 		st.startRelease(g)
+	case ev.k == kRune && (ev.r == 'l' || ev.r == 'L'):
+		st.startLdapRestore(g)
 	}
 }
 
@@ -821,7 +836,33 @@ func (st *tuiState) requestRelease() {
 		st.sel.Msg = "[X] 보류 해제 요청 실패: " + err.Error()
 		return
 	}
-	st.sel.Msg = "보류 해제를 요청했습니다 - 데몬이 수거하면 LDAP 복원 후 자동 설정체크+설정수정이 진행됩니다"
+	st.sel.Msg = "보류 해제를 요청했습니다 - 데몬이 수거하면 LDAP 비교 후 자동 설정체크+설정수정이 진행됩니다 (LDAP 복원은 l 명령, ldap_auto_restore=y 면 자동)"
+}
+
+// startLdapRestore: l — LDAP 복원 요청 확인 단계로 (안내 줄 아래 질문). y = 선택 호스트(전달 시점 백업 ok 일 때, 데몬이 다시 비교한 뒤
+// 필요하면 복원), a = 이 그룹(전체 보기면 job 전체)의 '복원 대기' 호스트. 둘 다 없으면 안내만
+func (st *tuiState) startLdapRestore(g *SnapGroup) {
+	host := ""
+	if hs := visibleHosts(g, st.sel.Filter); st.sel.Host >= 0 && st.sel.Host < len(hs) {
+		if l := hs[st.sel.Host].Ldap; l != nil && l.Backup == LdapBackupOK {
+			host = hs[st.sel.Host].Host
+		}
+	}
+	if host == "" && ldapPendingCount(g) == 0 {
+		st.sel.Msg = "LDAP 복원 대상이 없습니다 (선택 호스트는 LDAP 백업 없음, 복원 대기 호스트 없음)"
+		return
+	}
+	st.sel.LdapReq, st.sel.LdapHost = true, host
+}
+
+// requestLdapRestore: 확인 후 ldap-restore 요청 (target = 호스트, 그룹 yml, 전체 보기면 "*"). 결과는 다음 갱신에 비고(LDAP)로 보인다
+// (os6_mgmt 원격 클라이언트는 os8_mgmt 의 `auto_setup request ldap-restore` 로 중계)
+func (st *tuiState) requestLdapRestore(target string) {
+	if err := st.src.Request(ReqLdapRestore, map[string]string{"jobid": st.sel.JobID, "yml": target}); err != nil {
+		st.sel.Msg = "[X] LDAP 복원 요청 실패: " + err.Error()
+		return
+	}
+	st.sel.Msg = "LDAP 복원을 요청했습니다 (" + target + ") - 데몬이 수거하면 비교 후 필요하면 복원합니다 (결과는 비고 LDAP)"
 }
 
 // requestRecheck: g 키 — 이 그룹(전체 보기면 job 전체)의 완료 제외 호스트를 데몬이 지금 직접 재확인 (os8 → os6_mgmt → 접속불가).

@@ -82,6 +82,9 @@ func confVars() map[string]*string {
 
 		// os6_mgmt ssh 접속 제한(초)
 		"ssh_timeout": &ssh_timeout,
+
+		// LDAP 자동 복원 (비우면 꺼짐 = 비교만, 복원은 명령으로)
+		"ldap_auto_restore": &ldap_auto_restore,
 	}
 }
 
@@ -198,6 +201,10 @@ func ipChangeEnabled() bool { return adminMode || confTrue(enable_ip_change) }
 
 // ldapChangeEnabled: LDAP 변경 메뉴 가시성 = --admin 이거나 conf enable_ldap_change 가 켜짐
 func ldapChangeEnabled() bool { return adminMode || confTrue(enable_ldap_change) }
+
+// ldapAutoRestore: conf ldap_auto_restore 가 켜짐(y/yes/1/true) → READY 직후 비교 후 바로 복원.
+// 꺼져 있으면(기본) READY 직후 비교만 하고 복원은 request ldap-restore(TUI l) 로만 한다.
+func ldapAutoRestore() bool { return confTrue(ldap_auto_restore) }
 
 // engineBin: 변경 엔진 실행 파일 경로. name 은 ipEngineName 또는 ldapEngineName.
 // conf 의 ip_engine / ldap_engine 이 있으면 존재 확인 없이 그대로 돌려주고(실행 때 오류가 보이게),

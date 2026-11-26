@@ -44,8 +44,8 @@ type Host struct {
 // LdapState: 호스트별 LDAP 백업·비교 상태. 비교 기준은 binddn 의 uid 값이며 bindpw·uid 값 자체는 저장·출력하지 않는다.
 type LdapState struct {
 	Backup  string `json:"backup"`           // "none" | "ok"
-	Bindpw  string `json:"bindpw,omitempty"` // binddn uid 비교(키 이름은 호환 유지): "" (미비교) | "same" | "diff" | "na"(binddn 확인불가)
-	Applied bool   `json:"applied"`          // diff 일 때 백업본 적용 성공
+	Bindpw  string `json:"bindpw,omitempty"` // binddn uid 비교(키 이름은 호환 유지): "" (미비교) | "same" | "diff"(복원 대상: uid 다름·OS 종류 변경·새 OS binddn 없음) | "na"(백업 binddn 확인불가) | "unknown"(비교 전에 실패 — 확인 호출 실패·새 OS 무응답·OS 판별 불가 등, Reason 에 사유)
+	Applied bool   `json:"applied"`          // diff 일 때 백업본 적용 성공 (false + Reason 머리말 "복원 대기(명령 필요)" = 비교만 하고 request ldap-restore 대기)
 	Reason  string `json:"reason,omitempty"` // 사유 (백업 없음·적용 실패 등, 비밀값 금지)
 }
 
@@ -55,6 +55,7 @@ const (
 	BindpwSame     = "same"
 	BindpwDiff     = "diff"
 	BindpwNA       = "na"
+	BindpwUnknown  = "unknown"
 
 	SecondRunning = "running"
 	SecondOK      = "ok"
