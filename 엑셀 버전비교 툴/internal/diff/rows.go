@@ -20,7 +20,9 @@ const (
 	postingWindow  = 32      // 값 하나에서 가져오는 후보 수
 	candidateKeep  = 4       // 행 하나가 남기는 후보 수
 	lcsLimit       = 4 << 20 // 정확한 LCS 를 쓰는 일치 조합 수의 상한
-	dpLimit        = 40000   // 위치 짝짓기에 DP 를 쓰는 조합 수의 상한
+	dpLimit        = 40000   // 위치 짝짓기 DP 가 전체 조합을 보는 상한
+	bandMargin     = 64      // 큰 구간에서 대각선 양옆으로 더 보는 행 수
+	bandLimit      = 6 << 20 // 큰 구간 하나에서 DP 가 보는 조합 수의 상한
 	identMin       = 20      // 식별 열로 볼 최소 공통 값 수(값이 적으면 우연히 고유할 수 있음)
 )
 
@@ -102,7 +104,7 @@ func (a *aligner) pair(o, n int) { a.old.mate[o], a.new.mate[n] = n, o }
 // matchKeys 는 양쪽에서 각각 하나뿐인 키를 가진 행을 키로 짝짓는다.
 func (a *aligner) matchKeys(oldCol, newCol int, oldName, newName string) []reader.Warning {
 	var warnings []reader.Warning
-	index := func(s *side, col int, label, sheet string) map[string]int {
+	index := func(s *side, col int, label, sheet string) (map[string]int, map[string]int) {
 		keys := make([]string, len(s.rows))
 		count := map[string]int{}
 		for i := range s.rows {
@@ -131,15 +133,16 @@ func (a *aligner) matchKeys(oldCol, newCol int, oldName, newName string) []reade
 				"[%s 파일] 키가 비었거나 중복되거나 확인 불가인 %d개 행은 자동 정렬로 비교했습니다(행: %s)",
 				label, total, strings.Join(bad, ", "))})
 		}
-		return unique
+		return unique, count
 	}
-	oldKeys := index(&a.old, oldCol, "이전", oldName)
-	newKeys := index(&a.new, newCol, "최신", newName)
-	for _, i := range oldKeys {
-		a.old.fixed[i] = true
+	oldKeys, oldCount := index(&a.old, oldCol, "이전", oldName)
+	newKeys, newCount := index(&a.new, newCol, "최신", newName)
+	// 상대 파일에서 중복인 키의 행은 자동 정렬에 맡긴다.
+	for k, i := range oldKeys {
+		a.old.fixed[i] = newCount[k] <= 1
 	}
-	for _, i := range newKeys {
-		a.new.fixed[i] = true
+	for k, i := range newKeys {
+		a.new.fixed[i] = oldCount[k] <= 1
 	}
 	for k, o := range oldKeys {
 		if n, ok := newKeys[k]; ok {
@@ -465,16 +468,17 @@ func (a *aligner) positional(ids []ident) {
 	var found []link
 	a.gaps(func(_, _ link, olds, news []int) {
 		k, l := len(olds), len(news)
-		if k == l || k*l > dpLimit {
-			for i := range min(k, l) {
+		if k == l {
+			for i := range k {
 				if sim, _ := similarity(a.old.vec[olds[i]], a.new.vec[news[i]]); !a.apart(ids, olds[i], news[i], sim) {
 					found = append(found, link{olds[i], news[i]})
 				}
 			}
 			return
 		}
-		// 짝의 수를 최대로 하면서 유사도 합이 큰 짝짓기
-		score := make([]float64, (k+1)*(l+1))
+		// 짝의 수를 최대로 하면서 유사도 합이 큰 짝짓기. 큰 구간은 대각선 주변 band 만 본다.
+		lo, hi := band(k, l)
+		score := make([][]float64, k)
 		pairScore := func(i, j int) float64 {
 			sim, _ := similarity(a.old.vec[olds[i]], a.new.vec[news[j]])
 			if a.apart(ids, olds[i], news[j], sim) {
@@ -482,19 +486,28 @@ func (a *aligner) positional(ids []ident) {
 			}
 			return 1000 + sim
 		}
-		at := func(i, j int) int { return i*(l+1) + j }
+		at := func(i, j int) float64 {
+			switch {
+			case i == k || j == l:
+				return 0
+			case j < lo(i) || j > hi(i):
+				return math.Inf(-1)
+			}
+			return score[i][j-lo(i)]
+		}
 		for i := k - 1; i >= 0; i-- {
-			for j := l - 1; j >= 0; j-- {
-				score[at(i, j)] = max(score[at(i+1, j)], score[at(i, j+1)], score[at(i+1, j+1)]+pairScore(i, j))
+			score[i] = make([]float64, hi(i)-lo(i)+1)
+			for j := hi(i); j >= lo(i); j-- {
+				score[i][j-lo(i)] = max(at(i+1, j), at(i, j+1), at(i+1, j+1)+pairScore(i, j))
 			}
 		}
 		for i, j := 0, 0; i < k && j < l; {
-			switch score[at(i, j)] {
-			case score[at(i+1, j+1)] + pairScore(i, j):
+			switch at(i, j) {
+			case at(i+1, j+1) + pairScore(i, j):
 				found = append(found, link{olds[i], news[j]})
 				i++
 				j++
-			case score[at(i+1, j)]:
+			case at(i+1, j):
 				i++
 			default:
 				j++
@@ -504,6 +517,23 @@ func (a *aligner) positional(ids []ident) {
 	for _, l := range found {
 		a.pair(l.o, l.n)
 	}
+}
+
+// band 는 위치 짝짓기 DP 에서 이전 행 i 가 살펴보는 최신 행 범위 [lo(i), hi(i)] 를 돌려준다.
+// 작은 구간은 전체를, 큰 구간은 두 길이의 차이만큼 밀린 대각선 주변을 본다.
+// 차이가 너무 커서 상한을 넘으면 길이 비율 대각선 주변만 본다.
+func band(k, l int) (lo, hi func(i int) int) {
+	if k*l <= dpLimit {
+		return func(int) int { return 0 }, func(int) int { return l - 1 }
+	}
+	below, above := min(0, l-k)-bandMargin, max(0, l-k)+bandMargin
+	if k*(above-below+1) > bandLimit {
+		h := max(bandLimit/(2*k), l/k+1)
+		return func(i int) int { return max(0, min(i*l/k-h, l-1)) },
+			func(i int) int { return min(l-1, i*l/k+h) }
+	}
+	return func(i int) int { return max(0, min(i+below, l-1)) },
+		func(i int) int { return min(l-1, i+above) }
 }
 
 // ident 는 자동 식별 열이다. 양쪽에서 값이 거의 행마다 다르고, 그 값의 대부분이 양쪽에 다 있다.

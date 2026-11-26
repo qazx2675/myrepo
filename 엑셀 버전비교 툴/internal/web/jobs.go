@@ -236,10 +236,7 @@ func describeSheets(wb *reader.Workbook) []sheetInfo {
 			if h := []rune(header); len(h) > maxHeaderLen {
 				header = string(h[:maxHeaderLen]) + "…"
 			}
-			letter, err := excelize.ColumnNumberToName(num)
-			if err != nil {
-				continue // 읽은 열 번호는 Excel 범위 안이다
-			}
+			letter, _ := excelize.ColumnNumberToName(num) // 읽은 열 번호는 Excel 범위 안이다
 			cols = append(cols, columnInfo{num, letter, header})
 		}
 		slices.SortFunc(cols, func(a, b columnInfo) int { return a.Num - b.Num })

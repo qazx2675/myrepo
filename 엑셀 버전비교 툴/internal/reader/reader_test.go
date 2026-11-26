@@ -230,7 +230,7 @@ func TestFormulasAndRawTypes(t *testing.T) {
 	if !got["F1"].Unknown || got["C1"].Unknown || len(sh.Rows) != 1 {
 		t.Error("flags/rows", sh.Rows)
 	}
-	if len(wb.Warnings) != 1 || wb.Warnings[0].Cell != "F1" {
+	if len(wb.Warnings) != 2 || wb.Warnings[0].Cell != "F1" || !strings.Contains(wb.Warnings[1].Message, "자체 계산한 수식 4개") {
 		t.Error("warnings", wb.Warnings)
 	}
 }

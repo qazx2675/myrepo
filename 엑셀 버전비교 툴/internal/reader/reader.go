@@ -162,7 +162,8 @@ func read(data []byte, progress func(done, total int)) (wb *Workbook, err error)
 		}
 	}
 
-	var pending []formulaRef
+	var parsers []sheetParser // wb.Sheets 와 같은 순서
+	pending := 0
 	for _, s := range info.sheets {
 		if !s.worksheet {
 			wb.Warnings = append(wb.Warnings, Warning{Sheet: s.name, Message: "차트 시트 등 셀이 없는 시트는 비교하지 않습니다"})
@@ -185,14 +186,16 @@ func read(data []byte, progress func(done, total int)) (wb *Workbook, err error)
 		}
 		doneSize += size
 		wb.Sheets = append(wb.Sheets, p.sheet)
-		pending = append(pending, p.pending...)
+		parsers = append(parsers, p)
+		pending += len(p.pending)
 	}
 
 	// excelize 는 계산할 때 시트 전체를 메모리에 올리므로 모든 시트를 읽은 뒤에 계산한다.
-	for i, ref := range pending {
-		calculate(f, wb, ref)
-		if i%100 == 0 {
-			report(progressRead + (progressTotal-progressRead)*i/len(pending))
+	if pending > 0 {
+		if err := calculateAll(f, wb, parsers, func(done, total int) {
+			report(progressRead + (progressTotal-progressRead)*done/total)
+		}); err != nil {
+			return nil, err
 		}
 	}
 	dropEmpty(wb)
@@ -240,23 +243,6 @@ func fillDisplay(f *excelize.File, s *Sheet, progress func(row, last int)) (err 
 		return fmt.Errorf("%d행의 표시값을 읽지 못했습니다", s.Rows[next].Num)
 	}
 	return nil
-}
-
-// calculate 는 저장값 없는 수식을 계산한다. 실패하면 Unknown 으로 두고 경고를 남긴다.
-func calculate(f *excelize.File, wb *Workbook, ref formulaRef) {
-	s := &wb.Sheets[ref.sheet]
-	row := &s.Rows[ref.row]
-	c := &row.Cells[ref.cell]
-	axis, err := excelize.CoordinatesToCellName(c.Col, row.Num)
-	var raw, shown string
-	if err == nil {
-		raw, shown, err = calcValue(f, s.Name, axis, ref.styled)
-	}
-	if err != nil {
-		wb.Warnings = append(wb.Warnings, Warning{Sheet: s.Name, Cell: axis, Message: "저장된 계산값이 없고 수식을 계산할 수 없어 값 확인 불가"})
-		return
-	}
-	c.Key, c.Display, c.Unknown = calcKey(raw), shown, false
 }
 
 func calcValue(f *excelize.File, sheet, axis string, styled bool) (raw, shown string, err error) {

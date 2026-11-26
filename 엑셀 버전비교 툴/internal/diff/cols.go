@@ -186,13 +186,6 @@ func alignCols(a, b []column, oldKey, newKey int) []ColPair {
 	for _, i := range chain(w) {
 		anchors = append(anchors, links[i])
 	}
-	moved := map[link]bool{}
-	for _, l := range links {
-		moved[l] = true
-	}
-	for _, l := range anchors {
-		delete(moved, l)
-	}
 	for g, from := range anchors {
 		to := link{1 << 30, 1 << 30}
 		if g+1 < len(anchors) {

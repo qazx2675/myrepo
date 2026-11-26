@@ -243,6 +243,9 @@ type sheetParser struct {
 	date1904 bool
 	progress func(offset int64)
 	pending  []formulaRef
+	formulas []cellPos // 수식이 있는 셀
+	arrays   []arrayRef
+	copies   map[cellPos]bool // 공유 수식을 이어받은 셀
 
 	row     Row
 	lastCol int
@@ -339,6 +342,16 @@ func (p *sheetParser) cell(d *xml.Decoder, start xml.StartElement) error {
 				inline, err = textContent(d)
 			case "f":
 				hasFormula = true
+				at := cellPos{p.row.Num, col}
+				p.formulas = append(p.formulas, at)
+				if ref := attr(t, "ref"); ref != "" && attr(t, "t") == "array" {
+					p.arrays = append(p.arrays, arrayRef{at, ref})
+				} else if ref == "" && attr(t, "t") == "shared" {
+					if p.copies == nil {
+						p.copies = map[cellPos]bool{}
+					}
+					p.copies[at] = true
+				}
 				err = d.Skip()
 			default:
 				err = d.Skip()

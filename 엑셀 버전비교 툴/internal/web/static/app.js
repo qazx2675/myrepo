@@ -11,6 +11,7 @@ let state = {};
 let tableKey = ""; // 지금 표를 만든 파일 id. 바뀔 때만 다시 만들어 선택을 유지한다
 let rows = []; // 새 시트·삭제 시트 한 줄씩: {checked, old, new, oldKey, newKey}
 let failures = 0;
+let pollError = ""; // 상태 조회 실패로 띄운 문구
 let timer = 0;
 let starting = false;
 
@@ -27,10 +28,12 @@ async function poll() {
   try {
     state = await api("/api/state");
     failures = 0;
+    if (pollError && $("message").textContent === pollError) $("message").textContent = "";
+    pollError = "";
     render();
   } catch (e) {
     failures++;
-    if (failures === 1) $("message").textContent = e.message;
+    if (failures === 1) $("message").textContent = pollError = e.message;
   }
   $("offline").hidden = failures < 3;
   const busy = state.job?.status === "running" || sides.some((s) => uploading[s] || ["uploading", "reading"].includes(state[s]?.status));

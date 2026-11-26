@@ -190,10 +190,7 @@ func (s side) label(row *reader.Row) string {
 }
 
 func colName(n int) string {
-	s, err := excelize.ColumnNumberToName(n)
-	if err != nil { // 시트에서 읽은 열 번호는 항상 범위 안이다
-		return fmt.Sprint(n)
-	}
+	s, _ := excelize.ColumnNumberToName(n) // 시트에서 읽은 열 번호는 항상 범위 안이다
 	return s
 }
 

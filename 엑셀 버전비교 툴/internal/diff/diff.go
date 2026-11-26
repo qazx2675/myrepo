@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"excel-diff/internal/reader"
 )
@@ -121,7 +122,7 @@ type Result struct {
 	Warnings                 []reader.Warning
 }
 
-// DefaultPairs 는 같은 이름끼리 짝짓고 남는 시트는 추가/삭제로 둔다.
+// DefaultPairs 는 같은 이름끼리, 다음으로 대소문자만 다른 이름끼리 짝짓고 남는 시트는 추가/삭제로 둔다.
 // 순서는 최신 파일의 시트 순서이며 삭제된 시트가 뒤에 온다.
 func DefaultPairs(old, new *reader.Workbook) []SheetPair {
 	left := map[string]bool{}
@@ -136,6 +137,19 @@ func DefaultPairs(old, new *reader.Workbook) []SheetPair {
 			delete(left, s.Name)
 		}
 		pairs = append(pairs, p)
+	}
+	// 정확히 같은 이름을 모두 짝지은 뒤에 대소문자를 무시한다.
+	for i := range pairs {
+		if pairs[i].Old != "" {
+			continue
+		}
+		for _, s := range old.Sheets {
+			if left[s.Name] && strings.EqualFold(s.Name, pairs[i].New) {
+				pairs[i].Old = s.Name
+				delete(left, s.Name)
+				break
+			}
+		}
 	}
 	for _, s := range old.Sheets {
 		if left[s.Name] {
