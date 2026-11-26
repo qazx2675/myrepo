@@ -60,20 +60,24 @@ type Notifier interface{ Wall(msg string) }
 //	Backup: job 수거 후 첫 ping 에서 응답(ping O)한, 아직 seen_down 아닌 호스트 목록으로 job 당 1회.
 //	        반환 map 에 없는 호스트·Backup=="" 은 데몬이 {backup:none} 으로 기록(이후 LDAP 단계 생략).
 //	        이미 seen_down 인 호스트는 호출 없이 {backup:none}.
-//	Apply : READY 판정 직후(os_check run 전), backup=ok 이고 아직 비교 안 한(Bindpw=="") 호스트마다 1회.
-//	        반환값이 host.ldap 이 된다(Backup 이 비어 있으면 기존 "ok" 유지). 실패는 Reason 에 사유, run 은 진행.
+//	Probe  : READY 판정 직후(os_check run 전), backup=ok 이고 아직 비교 안 한(Bindpw=="") 호스트마다 1회 — 비교만(읽기 전용).
+//	         복원이 필요하면 쓰지 않고 '복원 대기(명령 필요)'(Bindpw=diff, Applied=false, Reason 머리말 ldapPendingPrefix) 를 돌려준다.
+//	         반환값이 host.ldap 이 된다(Backup 이 비어 있으면 기존 "ok" 유지). 실패는 Reason 에 사유, run 은 진행(복원을 기다리지 않음).
+//	Restore: 비교 후 필요하면 복원 — conf ldap_auto_restore=y 면 Probe 대신 READY 직후에, 아니면 request ldap-restore(TUI l) 처리 때.
 //
 // 구현 연결: ldapbk.go 에 `func init() { newLdap = func() LdapBackup { return NewRealLdapBackup() } }`.
 type LdapBackup interface {
 	Backup(job *Job, hosts []string) map[string]LdapState
-	Apply(job *Job, host string) LdapState
+	Probe(job *Job, host string) LdapState
+	Restore(job *Job, host string) LdapState
 }
 
 // nopLdap: 기본값(구현 전). 데몬은 nopLdap 이면 LDAP 단계를 통째로 건너뛴다(host.ldap 기록 없음).
 type nopLdap struct{}
 
 func (nopLdap) Backup(*Job, []string) map[string]LdapState { return nil }
-func (nopLdap) Apply(*Job, string) LdapState               { return LdapState{} }
+func (nopLdap) Probe(*Job, string) LdapState               { return LdapState{} }
+func (nopLdap) Restore(*Job, string) LdapState             { return LdapState{} }
 
 // ---- 2차(§14-6) 이중 체크 훅 — 실제 구현은 second.go(단계 P) ----
 

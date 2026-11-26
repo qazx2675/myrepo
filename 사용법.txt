@@ -71,6 +71,25 @@ auto_setup request manual-run 20261002-153000-user1 gpu.yml check
 # 설정체크 + 설정수정 (TUI 의 c 키와 같음)
 auto_setup request manual-run 20261002-153000-user1 gpu.yml
 
+# LDAP 복원은 명령으로만: READY 직후에는 비교만 하고, 복원이 필요하면 비고 "LDAP 복원 대기" 로 둔다 (run 은 기다리지 않고 진행).
+# 복원 요청 (TUI 화면 2 의 l 과 같음): 호스트 지정 = 다시 비교 후 필요하면 복원, yml·'*' = 그중 "LDAP 복원 대기" 호스트만. 종료된 job 도 됨
+auto_setup request ldap-restore 20261002-153000-user1 svr001
+auto_setup request ldap-restore 20261002-153000-user1 gpu.yml
+auto_setup request ldap-restore 20261002-153000-user1 '*'
+# 결과 확인 (비고 LDAP 열, 로그)
+grep -E 'LDAP 확인|LDAP 복원' /tmp/auto_setup/auto_setup.log | tail -20
+# 이전처럼 READY 직후 자동 복원하려면 conf 에 ldap_auto_restore=y 후 데몬 재시작 (기본 꺼짐)
+grep '^ldap_auto_restore=' /etc/auto_setup/auto_setup.conf
+
+# LDAP 백업·7/8 변환·복원 확인 도구 (job·데몬 무관, 자세히: ldaptest/README.md). 결과는 실행 위치의 ./out/<호스트>/{backup,rhel7,rhel8}
+# out 에는 bindpw 가 평문으로 있음(0700/0600) — 확인 후 rm -rf out. target 모드는 실제 서버 설정을 바꾸고 서비스를 재시작함
+cd /root/saccae-src/.claude/HPC/auto_setup/ldaptest
+./test list
+# list 의 서버(1대) 백업으로 target 비교 → 필요하면 복원 (yes 확인, -y 면 생략, ldap_share_dir 필요)
+./test list svr002
+# 직접 실행 (-out 으로 결과 디렉터리 변경)
+auto_setup ldap-test -out /root/ldap_out list
+
 # 요청이 거부됐는지 확인 (마지막 줄 reason= 에 사유: job/그룹 없음, 같은 그룹 중복 등)
 cat /tmp/auto_setup/requests/rejected/*.req
 
@@ -158,6 +177,7 @@ go build -ldflags "-X main.os_check_sh=<autofs 공유 os_check 전체경로> -X 
 # LDAP 복원(새 OS 의 binddn uid 가 백업과 다를 때)을 자동으로 하려면 ldap_share_dir(os8_mgmt·대상 서버·os6_mgmt 가 모두 보는 autofs 공유 경로)를 같이 주입.
 # 비밀(bindpw)은 gossh 명령줄에 실리지 않고 이 공유경로에 0700/0600 으로 잠시 놓였다가 복원 직후 삭제된다. 대상 root 가 읽을 수 있어야 함(no_root_squash).
 # 비워 두면 자동 복원은 하지 않고 "수동 복원 필요" 로 표시한다 (테스트·운영 빌드 때만 주입, 소스 커밋 금지)
+# 복원 시점: 기본은 auto_setup request ldap-restore(TUI l) 명령으로만, conf ldap_auto_restore=y 면 READY 직후 자동
 go build -ldflags "-X main.os_check_sh=<os_check 전체경로> -X main.ldap_share_dir=<autofs 공유 디렉터리>" -o auto_setup .
 
 # [os6] 01 을 os6_mgmt 에서 실행해도 전달이 os8_mgmt 에 되게 하려면: 01 복사본 최상단 auto_setup_host 를 채운다 (소스에는 커밋 금지)

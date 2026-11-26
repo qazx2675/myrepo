@@ -117,8 +117,9 @@ vi conf/auto_setup.conf        # 예: os8_mgmt=<os8_mgmt 호스트>
 | `closed_keep_days` | (선택) **종료된 작업(`jobs/done`)을 화면·`status` 에 보여 주는 기간(일)**. 1 이상의 정수. 지난 작업은 파일이 지워지는 게 아니라 화면에서만 빠지며, 값을 늘리면 그 기간의 작업이 날짜별 보기(`←` `→`)에 다시 나옵니다. 종료 후 수동 run·`g` 재확인도 이 기간 안의 작업만 화면에서 고를 수 있습니다 | `1` (24시간, 비우거나 숫자가 아니면 1) |
 | `max_runs` | (선택) **동시에 돌 수 있는 run(os_check 실행) 수**. 1 이상의 정수. 서로 다른 작업·같은 작업의 늦은 배치·수동 `c`/`t` run 이 같은 풀을 나눠 쓰며, 한 호스트는 두 run 에 동시에 들어가지 않습니다. 1 이면 종전처럼 한 번에 하나. 멈춘 run 은 슬롯 하나만 차지합니다. 데몬 재시작 필요 | `4` (비우거나 숫자가 아니면 4) |
 | `hang_min` | (선택) **gossh 멈춤(hang) 감지 시간(분)**. run 안의 gossh 호출(체크·적용·재확인) 하나가 이 시간을 넘으면 gossh 에 Ctrl+C 를 두 번 보내 아직 실행 중인 호스트만 취소하고(접속 실패·`ping X` 로 기록, 실패로 세어 다음 배치에서 재시도) 나머지는 계속 진행합니다. 1분 뒤에도 살아 있으면 SIGTERM. os6_mgmt 경유 호스트·2차 체크도 같습니다. 로그 `gossh hang 감지`. 0 이면 끔. 예: `hang_min=10`. 데몬 재시작 필요 | `7` (비우거나 숫자가 아니면 7) |
-| `stuck_hold_hours` | (선택) **늦은 READY 보류 기준(시간)**. 설치 시작(처음 `ping X`, READY 뒤 재부팅이면 그 재부팅. **`ping X` 를 보지 못한 호스트(빠른 재부팅·ping 정보 없음)는 작업 전달 시각**)부터 이 시간을 넘겨 READY 가 된 호스트 — 며칠 정체되다 갑자기 켜진 서버 등 — 는 READY 는 기록하되 **LDAP 복원·자동 설정체크+설정수정을 하지 않고 `보류`** 로 둡니다(로그 `늦은 READY 보류: <호스트> (정체 N시간, 기준 stuck_hold_hours=24, …) — h 메뉴에서 해제 또는 h→c 수동 실행`). 화면 2 의 `h`→`u` 로 해제하면 즉시 준비확인을 다시 해 응답하면 방금 READY 가 된 것처럼 자동 흐름(LDAP 복원 → bootWait/lateWait 뒤 run)으로 진행합니다(실행 중인 run·os6 직접 실행에 든 호스트는 해제하지 않고 로그 `[!] 보류 해제 보류`). `h`→`c` 수동 실행(실행 직전 LDAP 비교·복원을 한 번 함)·`d` 수동 완료는 보류 중에도 그대로 됩니다. 보류는 job 파일에 저장되어 데몬을 재시작해도 유지되고, 보류 중 재부팅돼 다시 READY 가 되어도 풀리지 않습니다. 보류 호스트가 있는 작업은 끝나지 않습니다(`jobs/done` 으로 가지 않음). 0 이면 끔(이전 동작). 데몬 재시작 필요 | `24` (비우거나 음수·숫자가 아니면 24) |
+| `stuck_hold_hours` | (선택) **늦은 READY 보류 기준(시간)**. 설치 시작(처음 `ping X`, READY 뒤 재부팅이면 그 재부팅. **`ping X` 를 보지 못한 호스트(빠른 재부팅·ping 정보 없음)는 작업 전달 시각**)부터 이 시간을 넘겨 READY 가 된 호스트 — 며칠 정체되다 갑자기 켜진 서버 등 — 는 READY 는 기록하되 **LDAP 복원·자동 설정체크+설정수정을 하지 않고 `보류`** 로 둡니다(로그 `늦은 READY 보류: <호스트> (정체 N시간, 기준 stuck_hold_hours=24, …) — h 메뉴에서 해제 또는 h→c 수동 실행`). 화면 2 의 `h`→`u` 로 해제하면 즉시 준비확인을 다시 해 응답하면 방금 READY 가 된 것처럼 자동 흐름(LDAP 복원 → bootWait/lateWait 뒤 run)으로 진행합니다(실행 중인 run·os6 직접 실행에 든 호스트는 해제하지 않고 로그 `[!] 보류 해제 보류`). `h`→`c` 수동 실행(실행 직전 LDAP 비교를 한 번 함 — 복원은 `ldap_auto_restore=y` 일 때만, 아니면 `l`/`request ldap-restore`)·`d` 수동 완료는 보류 중에도 그대로 됩니다. 보류는 job 파일에 저장되어 데몬을 재시작해도 유지되고, 보류 중 재부팅돼 다시 READY 가 되어도 풀리지 않습니다. 보류 호스트가 있는 작업은 끝나지 않습니다(`jobs/done` 으로 가지 않음). 0 이면 끔(이전 동작). 데몬 재시작 필요 | `24` (비우거나 음수·숫자가 아니면 24) |
 | `ssh_timeout` | (선택) **os6_mgmt 로 ssh 접속할 때의 접속 제한(초)** — 모든 ssh 의 `ConnectTimeout`. 5 이상의 정수(5 미만은 5), 비우거나 숫자가 아니면 30(이전 고정값은 10). 접속 시간이 들어가는 호출의 전체 상한(준비확인 60초, LDAP 백업 90초·적용 45초)은 접속 제한이 10초를 넘는 만큼의 2배가 더해진다(기본 30초면 100초·130초·85초). os6_mgmt 를 RHEL8 로 올린 뒤 ssh 로그인이 느려졌을 때 늘린다. 원인 점검: `os6_truble.sh` |
+| `ldap_auto_restore` | (선택) **LDAP 자동 복원**. `y`·`yes`·`1`·`true` 면 READY 직후 비교 후 바로 복원(이전 동작). **비우면(기본) 꺼짐 — READY 직후에는 비교만** 하고 복원이 필요하면 비고 `LDAP 복원 대기` 로 두며, 복원은 `auto_setup request ldap-restore` · TUI `l` 로만 합니다(「LDAP 백업/복원」 참고). 데몬 재시작 필요 | 꺼짐 |
 
 #### os_check 2개, 01 1개
 
@@ -271,7 +272,7 @@ queue/<epoch>_<user>_<pid>.job 생성 (프롬프트 없음)
     ↓
 자동 감시: ping 상태 판별 → 경로(local/os6) 결정 → 무응답 감지(설치 시작) → 준비확인(7분/3분)
     ↓
-READY → LDAP 비교(binddn 의 uid)·복원 (같으면 생략, 다르면 공유경로 경유로 백업 세트 복원)
+READY → LDAP 비교(binddn 의 uid) (같으면 생략, 복원이 필요하면 `LDAP 복원 대기` — 복원은 `request ldap-restore`·TUI `l` 명령으로만, conf `ldap_auto_restore=y` 면 바로 복원)
     ↓
 os_check -auto <user> <목록> 자동 실행 (동시 1개)
     ↓
@@ -305,6 +306,7 @@ codes/<code>.txt 생성 (wall 알림은 v0.4.3 부터 끔 — 결과는 TUI·`au
 | `request refresh` | 데몬에 즉시 ping·준비확인 요청 (TUI `r` 키와 같음, 5초 안에 수거) | [cli_request_other](docs/svg/cli_request_other.svg) |
 | `request recheck <jobid> <yml 또는 *>` | 완료 제외 호스트를 os8_mgmt → 안 되면 os6_mgmt 순으로 직접 재확인 (TUI `h`→`g` 와 같음, 5초 안에 수거) | [cli_request_recheck](docs/svg/cli_request_recheck.svg) |
 | `request release <jobid> <yml 또는 *>` | 늦은 READY `보류` 호스트(그룹, `*` 면 job 전체)를 자동 흐름(LDAP 복원·설정체크+설정수정)으로 되돌림 (TUI `h`→`u` 와 같음). 보류 호스트가 없으면 거부 (`requests/rejected/`) | |
+| `request ldap-restore <jobid> <호스트 또는 yml 또는 *>` | LDAP 백업 복원 (TUI `l` 과 같음, 5초 안에 수거). READY 직후에는 비교만 하므로 **복원은 이 명령으로만** 합니다(conf `ldap_auto_restore=y` 면 자동). 대상은 전달 시점 백업이 ok 이고 READY 를 거친 호스트 — `yml`·`*` 는 그중 `LDAP 복원 대기` 호스트만, 호스트를 지정하면 다시 비교한 뒤 필요하면 복원(같으면 `same`). 종료된 작업도 됩니다. 실행 중인 run·os6 직접 실행에 든 호스트는 건드리지 않음(로그 `[!] LDAP 복원 보류`). 결과는 비고 LDAP·로그 `LDAP 복원(요청): …`, 대상이 없으면 거부 (`requests/rejected/`) | |
 | `daemon` | 포그라운드 데몬 루프 (보통 ensure 가 백그라운드로 기동) — os8_mgmt 에서만 | [cli_ensure_daemon](docs/svg/cli_ensure_daemon.svg) |
 | `ensure` | 데몬이 없으면 백그라운드 기동 (cron 매분) — os8_mgmt 에서만 | [cli_ensure_daemon](docs/svg/cli_ensure_daemon.svg) |
 | `probe [-i 10s]` | (os6_mgmt 쪽) stdin 호스트 목록을 받고 ping 상태 출력 (`host up\|down`) | [cli_probe](docs/svg/cli_probe.svg) |
@@ -344,6 +346,7 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 | 2 | h → **d** (4) | (v0.7.1) 수동 완료. 안내 줄 아래에서 `1` 이 호스트 / `2` 그룹 미완료 전체 선택 → `y` 확인 (`Esc` 취소). 부팅 시각 검증 없이 완료로 인정하고 체크스크립트는 실행하지 않음 (CLI `auto_setup done` 과 같음). 전체 보기에서는 `1` 만 | [h→d](docs/svg/tui_h_d.svg) |
 | 2 | h → **v** (5) | 이 그룹의 가장 최근 수동 실행 결과 다시 보기 | [h→v](docs/svg/tui_h_v.svg) |
 | 2 | h → **u** (6) | 보류 해제 — **`보류` 호스트가 있을 때만 메뉴에 보임**. y/n 확인 후 이 그룹(전체 보기면 job 전체)의 보류 호스트를 즉시 준비확인 → 자동 흐름(LDAP 복원 → bootWait/lateWait 뒤 설정체크+설정수정)으로 되돌림. 실행 중인 run 의 호스트는 건드리지 않음 (CLI `auto_setup request release`, conf `stuck_hold_hours` 참고) | |
+| 2 | **l** (h → l (7)) | LDAP 복원 요청 — 안내 줄 아래 질문에서 `y` = 선택 호스트(LDAP 백업 ok)를 다시 비교 후 필요하면 복원, `a` = 이 그룹(전체 보기면 job 전체)의 `LDAP 복원 대기` 호스트 복원, 그 밖의 키 취소. h 메뉴·키 안내 줄(`l LDAP 복원(대기 N)`)에는 복원 대기 호스트가 있을 때만 보이며 `l` 키는 언제나 동작 (CLI `auto_setup request ldap-restore`) | |
 | 공통 | r | 바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동 갱신: 로컬 2초, 원격 10초. 연타는 5초에 1회만 요청) | [r](docs/svg/tui_r.svg) |
 | 공통 | **w** | **AWX 메뉴** — ` AWX ▶ 1 AWX 실행  2 신규 설치 양식`. `w` 를 한 번 더(`ww`)·`Enter`·`1` 이 예전의 AWX 실행, `2` 가 신규 설치 양식. `Esc`/`q` 로 메뉴만 닫음 | [w](docs/svg/tui_w_menu.svg) |
 | 공통 | w → **1** | AWX 실행 (awx_dir 의 01 을 이 터미널에서 실행, 프로파일 선택) — 「체크스크립트 단독 실행(x) · AWX 실행(w)」 참고 | [w→1](docs/svg/tui_w_1.svg) |
@@ -760,12 +763,24 @@ os6_mgmt 를 RHEL8 로 올린 뒤 ssh 가 느리거나 os6_mgmt 경유 호스트
 
 ### LDAP 백업/복원
 
-옛 OS 가 살아 있는 **전달 시점**에 호스트별 LDAP 관련 설정을 백업하고, 설치가 끝난(READY) 뒤 **os_check 실행 전**에 비교·복원합니다. os_check/설정 스크립트는 변경 없음.
+옛 OS 가 살아 있는 **전달 시점**에 호스트별 LDAP 관련 설정을 백업하고, 설치가 끝난(READY) 뒤 **os_check 실행 전**에 비교합니다. os_check/설정 스크립트는 변경 없음.
+
+> **복원은 명령으로만**: READY 직후에는 **비교만**(새 OS 판별·binddn uid·인증/시각 종류, 읽기 전용) 하고, 복원이 필요하면 공유경로·대상 파일·서비스를 건드리지 않고 비고 `LDAP 복원 대기`(상태 `bindpw=diff`·`applied=false`·`reason="복원 대기(명령 필요)…"`)로 둡니다. run(os_check)은 복원을 기다리지 않고 그대로 진행합니다. 복원은 `auto_setup request ldap-restore <jobid> <호스트|yml|*>` 또는 TUI 화면 2 의 `l` 로 하며, 그때 아래 2·3 의 비교→복원을 실행합니다. conf `ldap_auto_restore=y` 면 이전처럼 READY 직후 자동 복원합니다(기본 꺼짐).
+>
+> 비고 `LDAP` 문구: `백업 대기`(아직 백업 시도 전) · `백업됨`(백업 성공, 비교 전) · `백업없음` · `binddn 동일` · `복원 대기` · `복원`(변환했으면 방향에 따라 `복원(7→8 변환)`·`복원(8→7 변환)`, 서비스 재시작이 실패하면 `복원(서비스 재시작 실패: …)`) · `적용실패`(복원 중 실패, `bindpw=diff`) · `확인실패(사유)`(비교 전 실패 — 확인 호출 실패·새 OS 무응답·OS 판별 불가·공유경로 오류·백업 읽기 실패, 상태 `bindpw=unknown`) · `binddn 확인불가`.
 
 1. 전달 시점: job 수거 직후 ping O 이고 아직 seen_down 이 아닌 호스트를 gossh 로 백업(`/tmp/auto_setup/ldapbak/<jobid>/<host>/`, 디렉터리 0700 · 파일 0600). 이미 재설치 중이거나 접속 불가면 `backup:none` → 이후 단계 생략.
 2. READY 후: 새 OS 의 `ldap.conf` 에서 **`binddn` 줄의 `uid=<값>` 의 값만** 뽑아 백업본의 같은 값과 비교합니다. 예: `binddn uid=asdf,ou=user,dc=x` → `asdf`. 원격에서는 **bindpw 를 읽지도 출력하지도 않고** uid 값 한 줄만 회수합니다(키워드 `binddn`/`BINDDN` 대소문자 무관, 따옴표 제거).
-   - 같으면(`same`) 생략, 다르면(`diff`) **백업 파일 세트를 복원**(원 권한·소유, `restorecon`, 서비스 재시작) 후 새 OS 의 binddn uid 가 백업과 같아졌는지 재확인.
-   - 어느 한쪽이라도 binddn uid 를 읽지 못하면(`na`, `binddn 확인불가`) 복원하지 않습니다.
+   - uid 가 같고 인증·시각 종류(nslcd/sssd, ntp/chrony)도 백업과 같으면(`same`) 생략합니다. **uid 가 다르거나, 백업의 종류가 새 OS 와 다르거나(예: RHEL7→8, 8→7), 새 OS `ldap.conf` 에 binddn uid 가 없으면**(`diff`) **백업 파일 세트를 복원**(원 권한·소유, `restorecon`, 파일을 하나라도 썼으면 `systemctl restart <sssd|nslcd> autofs <chronyd|ntpd> nscd` 고정 순서로 재시작 — 설치 안 된 유닛은 실패가 아니라 건너뛰고, systemctl 없는 OS 는 `service` 로 대체, enable·authselect 는 안 함) 후 새 OS 의 binddn uid 가 백업과 같아졌는지 재확인.
+   - 백업 쪽 binddn uid 를 읽지 못하면(`na`, `binddn 확인불가`) 복원하지 않습니다.
+   - **RHEL7↔8 양방향 변환** — **7→8**: 백업이 `nslcd.conf`/`ntp.conf` 인데 새 OS 가 sssd/chrony 이면 백업 값으로 `/etc/sssd/sssd.conf`(0600 root:root)·`/etc/chrony.conf`(0644 root:root)를 만들어 씁니다(새 OS 에 nslcd.conf·ntp.conf 는 쓰지 않음, s4 호스트처럼 한쪽만 다르면 그 파일만 변환).
+     - sssd.conf: `[domain/default]` id/auth/chpass_provider=ldap 에 `uri`(여러 개면 쉼표)·`base`(`base passwd|shadow`→user, `base group`→group search base)·`binddn`·`bindpw`·`ssl start_tls`·`tls_reqcert`·`tls_cacertdir`/`tls_cacertfile` 을 옮기고 `cache_credentials = True`. TLS(ldaps·start_tls)가 없으면 nslcd 처럼 평문 인증이 되도록 `ldap_auth_disable_tls_never_use_in_production = true` 를 넣습니다. map/filter 등 나머지 키는 무시.
+     - chrony.conf: `server`/`pool` 줄(옵션은 iburst·burst·prefer·noselect·xleave·minpoll·maxpoll·version 만, 127.127.x.x 제외) + RHEL8 기본 줄(`driftfile /var/lib/chrony/drift`, `makestep 1.0 3`, `rtcsync`, `logdir /var/log/chrony`). restrict 등은 무시.
+     - **8→7**: 백업이 `sssd.conf`/`chrony.conf` 인데 새 OS 가 nslcd/ntp 이면 백업 값으로 `/etc/nslcd.conf`(0600 root:root)·`/etc/ntp.conf`(0644 root:root)를 만들어 씁니다(새 OS 에 sssd.conf·chrony.conf 는 쓰지 않음, s4 호스트처럼 한쪽만 다르면 그 파일만 변환).
+       - nslcd.conf: RHEL7 기본 줄 `uid nslcd`·`gid ldap` + `[sssd] domains` 의 첫 번째 도메인(없으면 첫 `[domain/*]`)에서 `ldap_uri`(쉼표 → 공백 구분 `uri` 한 줄)·`ldap_search_base`→`base`·`ldap_user_search_base`/`ldap_group_search_base`→`base passwd`/`base group`·`ldap_default_bind_dn`→`binddn`·`ldap_default_authtok`→`bindpw`·`ldap_id_use_start_tls = True`→`ssl start_tls`·`ldap_tls_reqcert`/`ldap_tls_cacertdir`/`ldap_tls_cacert`→`tls_reqcert`/`tls_cacertdir`/`tls_cacertfile`. 나머지 키는 무시.
+       - ntp.conf: RHEL7 기본 줄(`driftfile /var/lib/ntp/drift`, `restrict default nomodify notrap nopeer noquery`, `restrict 127.0.0.1`, `restrict ::1`) + `server`/`pool` 줄(옵션은 ntp 에도 있는 iburst·burst·prefer·noselect·xleave·minpoll·maxpoll·version 만, maxdelay 등 chrony 전용 옵션은 제거). refclock·makestep 등은 무시.
+     - uri·binddn·bindpw 또는 server/pool 이 없으면(sssd 의 authtok 종류가 password 가 아니어도) `변환 실패: sssd.conf|chrony.conf|nslcd.conf|ntp.conf(수동 확인)` 으로 아무것도 바꾸지 않습니다.
+     - 성공 시 사유(로그·상태)에 `OS 종류 변경` / `새 OS binddn 없음` / `변환 nslcd.conf→sssd.conf,ntp.conf→chrony.conf`(8→7 은 `변환 sssd.conf→nslcd.conf,chrony.conf→ntp.conf`) 가 남습니다(값은 남기지 않음).
    - `ldap_share_dir` 이 비어 있으면 diff 여도 자동 복원하지 않고 `수동 복원 필요(ldap_share_dir 미설정, 백업: <경로>)` 로 표시합니다(비고에 `LDAP 수동 복원 필요`).
    - 실패 시 로그·상태에만 남기고 run 은 계속 진행(os_check 가 FAIL 로 보고).
 3. 복원 전송 방식(`ldap_share_dir` 설정 시): os8_mgmt 가 `<ldap_share_dir>/.as_ldap_<랜덤 32자>/<호스트>/` 를 0700, 파일을 0600 으로 만들어 백업 파일을 잠시 두고, gossh 명령에는 **경로·mode·owner·group·서비스명만** 싣습니다. 대상 서버는 그 파일을 `cat` 으로 읽어 제자리에 쓰고(원 mode/owner 로 `mv`), 끝나면 성공·실패와 관계없이 os8_mgmt 가 공유 임시 디렉터리를 **즉시 삭제**합니다. 대상이 공유경로를 못 읽으면 `공유경로 접근 실패` 로 표시하고 아무것도 바꾸지 않습니다.
@@ -774,7 +789,7 @@ os6_mgmt 를 RHEL8 로 올린 뒤 ssh 가 느리거나 os6_mgmt 경유 호스트
 
 | 구분 | OS 7 이하 | OS 8 이상 |
 |---|---|---|
-| 공통 | `/etc/openldap/ldap.conf`, `/etc/resolv.conf` | 동일 |
+| 공통 | `/etc/openldap/ldap.conf`, `/etc/resolv.conf`, `/etc/autofs.conf`, `/etc/autofs_ldap_auth.conf` (autofs 파일은 없으면 건너뜀) | 동일 |
 | 인증 | `/etc/nslcd.conf` | `/etc/sssd/sssd.conf` |
 | 시각 | `/etc/ntp.conf` | `/etc/chrony.conf` |
 
@@ -790,6 +805,20 @@ s4 호스트(hostname 접두사 규칙)는 OS 8+ 여도 `services` 에 `nslcd`/`
 > - 백업 수집은 gossh 응답(stdout)으로 받으며 명령은 `cat` 뿐입니다. 저장은 0700/0600 입니다.
 > - 백업(`/tmp/auto_setup/ldapbak/<jobid>/`)은 **자동 삭제되지 않습니다.** 작업이 끝나면 수동으로 `rm -rf` 하십시오.
 > - 로그·snapshot·code·wall·TUI 에는 bindpw 가 남지 않습니다(비교 기준은 binddn uid, 기본 로그에는 호스트별 same/diff 만 남기고 uid 값도 남기지 않음).
+
+#### LDAP 복원 테스트 도구 (`ldap-test`)
+
+auto_setup 의 LDAP 백업·7↔8 변환·복원 로직을 job·데몬 없이 그대로 실행해 확인합니다. 자세한 내용은 [ldaptest/README.md](ldaptest/README.md).
+
+```bash
+cd ldaptest
+./test list           # list 의 서버마다 ./out/<호스트>/{backup,rhel7,rhel8} 생성 (backup=원본+meta.json, rhel7=nslcd/ntp, rhel8=sssd/chrony)
+./test list target    # list 의 서버(1대) 백업으로 target 을 비교하고 필요하면 복원 (yes 확인, -y 생략, ldap_share_dir 필요)
+./test -out /root/ldap_out list   # 결과 디렉터리 변경 (기본 ./out, 같은 호스트는 덮어씀)
+# 직접 실행: auto_setup ldap-test [-out <dir>] [-y] <list파일> [target서버]   (종료코드 0 성공 / 1 일부 실패 / 2 사용법 오류)
+```
+
+> `out/` 의 설정 파일에는 bindpw·secret 이 평문으로 있습니다(0700/0600). 확인 후 지우십시오. target 모드는 실제 서버의 설정 파일을 덮어쓰고 서비스를 재시작합니다.
 
 ### 단계별 점검 (테스트)
 
@@ -937,7 +966,7 @@ bash ../awx_script/test/run_tests.sh
 ## 알려진 제한
 
 - `/tmp/auto_setup` 의 **소유자 검증이 없습니다.** root 만 쓰는 서버에서 운영하고 `ls -ld /tmp/auto_setup` 으로 소유자·권한을 확인하십시오.
-- LDAP Apply 는 **직렬 처리**입니다(호스트가 많으면 READY 후 run 시작이 늦어질 수 있음).
+- LDAP 비교·복원은 **직렬 처리**입니다(호스트가 많으면 READY 후 run 시작이 늦어질 수 있고, `request ldap-restore` 로 여러 대를 한 번에 복원하면 그동안 데몬 주기(ping·준비확인)가 늦어집니다).
 - **정리 정책이 없는 디렉터리**: `ldapbak/`, `requests/rejected/`, `jobs/done/`, `runs/*/second/` — 필요시 수동 정리.
 - `AUTO_SETUP_NOW` 는 테스트 전용입니다(운영에서 설정하면 snapshot 시각이 어긋남).
 - 원격 클라이언트 모드의 gossh 호출에는 **시간 제한이 없습니다**(os8_mgmt 가 응답하지 않으면 대기).

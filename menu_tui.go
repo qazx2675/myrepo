@@ -68,6 +68,11 @@ func (st *tuiState) openMenu(open rune) {
 			if _, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml); g != nil && g.Counts.Held > 0 {
 				st.menu.Items = append(st.menu.Items, hostKey('u', '6', "보류 해제"))
 			}
+			// LDAP 복원 대기 호스트가 있을 때만 l(LDAP 복원)을 붙인다 — READY 직후에는 비교만 하므로 복원은 l(또는 CLI request ldap-restore)로.
+			// 없으면 메뉴는 종전과 같다 (l 키는 메뉴 없이도 동작: 선택 호스트 다시 비교 후 필요하면 복원)
+			if _, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml); g != nil && ldapPendingCount(g) > 0 {
+				st.menu.Items = append(st.menu.Items, hostKey('l', '7', "LDAP 복원"))
+			}
 		}
 	case 'w':
 		st.menu = awxMenu()

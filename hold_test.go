@@ -47,7 +47,7 @@ func holdLog(t *testing.T) string {
 	return string(b)
 }
 
-// holdLdap: 전달 시점 백업은 모두 ok, Apply 호출(호스트)을 기록
+// holdLdap: 전달 시점 백업은 모두 ok, READY 직후 LDAP 확인(Probe·Restore) 호출(호스트)을 기록
 type holdLdap struct {
 	mu      sync.Mutex
 	applied []string
@@ -61,7 +61,9 @@ func (l *holdLdap) Backup(_ *Job, hosts []string) map[string]LdapState {
 	return out
 }
 
-func (l *holdLdap) Apply(_ *Job, host string) LdapState {
+func (l *holdLdap) Probe(j *Job, host string) LdapState { return l.Restore(j, host) }
+
+func (l *holdLdap) Restore(_ *Job, host string) LdapState {
 	l.mu.Lock()
 	l.applied = append(l.applied, host)
 	l.mu.Unlock()

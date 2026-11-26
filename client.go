@@ -136,7 +136,7 @@ func requestArgs(kind string, payload map[string]string) ([]string, error) {
 			args = append(args, payload["mode"])
 		}
 		return args, nil
-	case ReqRecheck, ReqRelease:
+	case ReqRecheck, ReqRelease, ReqLdapRestore:
 		return []string{"request", kind, payload["jobid"], payload["yml"]}, nil
 	case ReqCancel:
 		return []string{"request", ReqCancel, payload["jobid"]}, nil

@@ -59,12 +59,16 @@ var (
 	max_runs = "" // 동시에 실행하는 run(설정체크) 최대 개수. 1 이상의 정수(1 미만 숫자는 1 = 이전처럼 한 번에 하나), 비우거나 숫자가 아니면 4
 	hang_min = "" // run 의 gossh 호출 1회가 이 시간(분)을 넘기면 걸린 호스트만 취소(INT×2)하고 계속. 0 이면 끔, 비우거나 숫자가 아니면 7
 
-	// 늦은 READY 보류 (conf.go 의 stuckHold) — 설치 시작(ping X) 뒤 이 시간(시간)을 넘겨 READY 된 호스트는 LDAP 복원·자동 run 을 하지 않고 보류.
+	// 늦은 READY 보류 (conf.go 의 stuckHold) — 설치 시작(ping X) 뒤 이 시간(시간)을 넘겨 READY 된 호스트는 LDAP 비교·복원·자동 run 을 하지 않고 보류.
 	// 0 이면 끔, 비우거나 음수·숫자가 아니면 24
 	stuck_hold_hours = ""
 
 	// os6_mgmt 로의 ssh 접속 제한(초) — 모든 ssh 의 ConnectTimeout (conf.go 의 sshTimeoutSec)
 	ssh_timeout = "" // 5 이상의 정수(5 미만은 5), 비우거나 숫자가 아니면 30. 준비확인·LDAP 의 전체 시간 상한도 함께 늘어난다 (sshLimit)
+
+	// LDAP 자동 복원 (conf.go 의 ldapAutoRestore) — y/yes/1/true 면 READY 직후 비교 후 바로 복원. 비우면 꺼짐:
+	// READY 직후 비교만 하고 복원이 필요하면 '복원 대기' 로 두며, 복원은 `auto_setup request ldap-restore` (TUI l) 로만
+	ldap_auto_restore = ""
 )
 
 // adminMode: `auto_setup --admin` 으로 TUI 를 띄웠을 때만 true. 변경 메뉴를 conf 와 무관하게 켠다 (데몬·request 에는 영향 없음).
@@ -101,12 +105,19 @@ const usageText = `사용법: auto_setup [명령]
   request cancel <jobid>             작업 종료 요청
   request refresh                    즉시 ping·준비확인 요청 (TUI r 키와 같음)
   request recheck <jobid> <yml|*>    완료 제외 호스트를 os8 → 안 되면 os6_mgmt 순으로 직접 재확인 (TUI g 키와 같음)
-  request release <jobid> <yml|*>    늦은 READY 보류 호스트를 자동 흐름(LDAP 복원·설정체크+설정수정)으로 되돌림 (TUI h→u 와 같음)
+  request release <jobid> <yml|*>    늦은 READY 보류 호스트를 자동 흐름(LDAP 비교·설정체크+설정수정)으로 되돌림 (TUI h→u 와 같음)
+  request ldap-restore <jobid> <호스트|yml|*>
+                                     LDAP 백업 복원 (TUI l 과 같음). READY 직후에는 비교만 하고 복원은 이 명령으로만 한다
+                                     (conf ldap_auto_restore=y 면 READY 직후 자동). yml·* 는 '복원 대기' 호스트만,
+                                     호스트를 지정하면 다시 비교한 뒤 필요하면 복원
   daemon              포그라운드 데몬 (보통 ensure 가 백그라운드로 기동)
   ensure              데몬이 없으면 백그라운드로 기동 (cron 매분)
   probe [-i 10s]      (os6_mgmt 쪽) stdin 호스트 목록 ping 감시
   newhost [-user <이름>]  신규 설치 양식: hostname ip mac → awx_dir/<user>.txt (TUI w→2 와 같은 화면, tty·os8_mgmt 에서만)
   s [-user <이름>]        gossh 작업 기록: 붙여넣은 호스트를 /tmp/auto_setup/lists/<3자리> 로 만들어 gossh 실행·user 별 기록 (TUI s 와 같은 화면, tty 에서만)
+  ldap-test [-out <dir>] [-y] <list파일> [target서버]
+                      LDAP 백업·7/8 변환 확인: list 의 서버마다 ./out/<호스트>/{backup,rhel7,rhel8} 생성. target 을 주면
+                      list 의 서버(1대) 백업으로 target 을 auto_setup 과 같이 비교하고 필요하면 복원 (ldaptest/README.md)
 `
 
 func main() {
@@ -183,6 +194,8 @@ func run(args []string) int {
 		return runEnsure()
 	case "probe":
 		return runProbe(args[1:])
+	case "ldap-test": // LDAP 백업·변환·복원 확인 도구 (ldaptest.go, ldaptest/test 래퍼)
+		return cmdLdapTest(args[1:], os.Stdin, os.Stdout, os.Stderr)
 	case "route-split": // 내부용: x 단독 체크 전 경로 판별 — os8 무응답·os6_mgmt 응답 호스트를 출력 (oneoff.go)
 		if len(args) != 2 {
 			return usageFail()

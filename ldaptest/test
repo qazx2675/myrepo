@@ -1,0 +1,30 @@
+#!/bin/bash
+# ldaptest/test - auto_setup ldap-test 래퍼 (auto_setup 의 LDAP 백업·7/8 변환·복원 로직 확인용, README.md 참고)
+#   ./test list            list 의 서버마다 ./out/<호스트>/{backup,rhel7,rhel8} 생성
+#   ./test list target     list 의 서버(1대) 백업으로 target 을 비교하고 필요하면 복원 (yes 확인, -y 면 생략)
+# 실행 파일: 이 스크립트 위치 기준 ../auto_setup_os8, 없으면 PATH 의 auto_setup.
+# 작업 디렉터리를 바꾸지 않는다 — 결과(./out)는 실행한 위치에 생긴다.
+here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+bin="$here/../auto_setup_os8"
+if [ ! -x "$bin" ]; then
+  bin=$(command -v auto_setup 2>/dev/null)
+  if [ -z "$bin" ]; then
+    echo "[X] auto_setup 실행 파일이 없습니다 ($here/../auto_setup_os8 또는 PATH 의 auto_setup)" >&2
+    exit 2
+  fi
+fi
+if [ $# -eq 0 ]; then
+  cat >&2 <<'EOF'
+사용법: ./test [-out <dir>] [-y] <list파일> [target서버]
+  ./test list              list 의 서버마다 ./out/<호스트>/ 에 backup/(원본+meta.json)·rhel7/·rhel8/(변환 세트) 생성
+  ./test list target       list 의 서버(정확히 1대) 백업으로 target 을 auto_setup 과 같은 규칙으로 비교하고,
+                           필요하면 복원 (target 설정 파일을 덮어쓰고 서비스 재시작 — yes 확인)
+  -out <dir>               결과 디렉터리 (기본 ./out)
+  -y                       target 복원 전 확인 생략
+  list 파일: 한 줄에 호스트 하나 (공백·쉼표·탭 구분 가능, # 주석·빈 줄 무시)
+  종료코드: 0 모두 성공, 1 일부 실패, 2 사용법 오류
+자세한 내용: README.md (out 에는 bindpw 가 들어 있으니 보관·삭제에 주의)
+EOF
+  exit 2
+fi
+exec "$bin" ldap-test "$@"

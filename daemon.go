@@ -77,7 +77,10 @@ type hostRT struct {
 	resolveLogged bool
 	resolveFails  int // 연속 이름 해석 실패 횟수 (resolveToOS6 회면 os6 경유로)
 	oldOSLogged   bool
-	ldapNow       bool // 이번 주기에 os6 로 판별됨 → os6 probe 첫 응답을 기다리지 않고 LDAP 백업을 한 번 시도 (ldapBackup)
+	ldapNow       bool      // 이번 주기에 os6 로 판별됨 → os6 probe 첫 응답을 기다리지 않고 LDAP 백업을 한 번 시도 (ldapBackup)
+	ldapTries     int       // 전달 시점 LDAP 백업의 일시적 실패 횟수 (ldapBackup 재시도, 상한 ldapRetryMax)
+	ldapNext      time.Time // 다음 재시도 가능 시각 (일시적 실패 + ldapRetryGap)
+	ldapWhy       string    // 마지막 일시적 실패 사유 — seen_down·READY·상한 때 none 사유로 확정 (gossh 접속 오류 문구뿐, 비밀값 없음)
 }
 
 type inflight struct {
@@ -123,6 +126,12 @@ func newDefaultDaemon() *Daemon {
 		Ldap:     newLdap(),
 		Second:   newSecond(),
 	}
+}
+
+// ldapFeatureOn: LDAP 기능이 켜져 있는지 (구현이 nop 이 아님) — 데몬 없이 스냅샷(model.go)에서 쓴다. ldapOn 과 같은 기준.
+func ldapFeatureOn() bool {
+	_, nop := newLdap().(nopLdap)
+	return !nop
 }
 
 func (d *Daemon) ldapOn() bool {
@@ -474,7 +483,8 @@ func (d *Daemon) addJob(j *Job, fresh bool) {
 			if o.ID == j.ID {
 				continue
 			}
-			if _, ok := o.Hosts[name]; ok {
+			if oh, ok := o.Hosts[name]; ok {
+				d.ldapInherit(o, j, name, oh)
 				delete(o.Hosts, name)
 				d.dirty[o.ID] = true
 				moved[o.ID]++
@@ -488,6 +498,22 @@ func (d *Daemon) addJob(j *Job, fresh bool) {
 		logf("중복 전달: job %s 에서 %d대 제거 → job %s", id, n, j.ID)
 	}
 	d.jobs[j.ID] = j
+}
+
+// ldapInherit: 같은 호스트 재전달 — 이전 job 의 전달 시점 백업(ok, ldapbak/<이전job>/<host>)을 새 job 으로 옮겨 이어받는다.
+// 새로 백업하면 이미 설치가 시작된 새 OS 설정을 수집할 수 있기 때문. 비교·적용 결과는 새 job 에서 다시 하도록 {backup:ok} 만 넘긴다.
+func (d *Daemon) ldapInherit(o, j *Job, name string, oh *Host) {
+	nh := j.Hosts[name]
+	if nh == nil || nh.Ldap != nil || oh.Ldap == nil || oh.Ldap.Backup != LdapBackupOK {
+		return
+	}
+	if err := moveBackup(o.ID, j.ID, name); err != nil {
+		logf("[!] LDAP 백업 이어받기 실패: %s (job %s → %s): %v", name, o.ID, j.ID, err)
+		return
+	}
+	nh.Ldap = &LdapState{Backup: LdapBackupOK}
+	d.dirty[j.ID] = true
+	logf("LDAP 백업 이어받음: %s (job %s → %s)", name, o.ID, j.ID)
 }
 
 func (d *Daemon) removeJob(id string) {
@@ -548,7 +574,7 @@ func (d *Daemon) step(now time.Time) {
 		d.lastPing = now
 		d.resolve()
 		d.ping(now)
-		d.ldapBackup()
+		d.ldapBackup(now)
 	}
 	if now.Sub(d.lastCheck) >= checkInterval {
 		d.lastCheck = now
@@ -595,8 +621,45 @@ func (d *Daemon) onProgress(p runProgress, now time.Time) {
 	}
 }
 
-// ldapBackup: 전달 시점 LDAP 백업 — 아직 ldap 상태가 없는 호스트 중 ping O·seen_down 아님 → Backup(job 당 1회 호출, 직렬)
-func (d *Daemon) ldapBackup() {
+// LDAP 전달 시점 백업의 일시적 실패(무응답·수집 호출 실패·시간 초과) 재시도 — 최소 간격과 최대 시도 횟수.
+// 재시도는 seen_down(설치 시작으로 본 ping X) 전까지만 하고, 상한을 넘기거나 seen_down·READY 가 되면 마지막 사유로 none 확정.
+var (
+	ldapRetryGap = 60 * time.Second
+	ldapRetryMax = 10
+)
+
+// ldapTransient: 일시적 수집 실패 (호스트가 켜져 있는지·접속되는지 아직 모름) — 영구 사유(OS 판별 불가·ldap.conf 없음·저장 실패 등)는 아님
+func ldapTransient(st LdapState) bool {
+	return st.Backup != LdapBackupOK && (strings.HasPrefix(st.Reason, ldapNoResp) || strings.HasPrefix(st.Reason, ldapCallFail))
+}
+
+// deliveryStage: 전달 직후 단계 (아직 설치 진행·READY 를 보지 않음) — 이때만 기존 OS 설정을 전달 시점 백업으로 수집할 수 있다
+func deliveryStage(h *Host) bool {
+	s := Stage(h.Stage)
+	return h.ReadyAt == 0 && (s == "" || s == StageQueued || s == StageDeploying)
+}
+
+// ldapNoBackup: 백업 없이 확정 — 재시도 중이던 일시적 실패 사유가 있으면 그 사유, 없으면 def
+func (d *Daemon) ldapNoBackup(j *Job, name, def string) {
+	h := j.Hosts[name]
+	if h == nil || h.Ldap != nil {
+		return
+	}
+	why := def
+	if r := d.rt[name]; r != nil && r.ldapWhy != "" {
+		why = r.ldapWhy
+	}
+	h.Ldap = &LdapState{Backup: LdapBackupNone, Reason: why}
+	d.dirty[j.ID] = true
+	if why != "전달 시점 ping X" { // 처음부터 꺼진 호스트는 종전처럼 로그 생략
+		logf("[!] LDAP 백업 불가: %s (job %s) - %s", name, j.ID, why)
+	}
+}
+
+// ldapBackup: 전달 시점 LDAP 백업 — 아직 ldap 상태가 없는 전달 직후 단계 호스트 중 ping O·seen_down 아님 → Backup(job 당 1회 호출, 직렬).
+// 일시적 실패는 ldapRetryGap 뒤 다시 시도(최대 ldapRetryMax 회). READY 이후 호스트는 새 OS 설정일 수 있어 수집하지 않고
+// "전달 시점 백업 없음" 으로 기록하며, 재기동 직후 호스트는 기동 직후 준비확인(startCheck)이 READY 여부를 정한 뒤에 수집한다.
+func (d *Daemon) ldapBackup(now time.Time) {
 	if !d.ldapOn() {
 		return
 	}
@@ -607,11 +670,16 @@ func (d *Daemon) ldapBackup() {
 				continue
 			}
 			if h.SeenDown {
-				h.Ldap = &LdapState{Backup: LdapBackupNone, Reason: "전달 시점 ping X"}
-				d.dirty[j.ID] = true
+				d.ldapNoBackup(j, name, "전달 시점 ping X")
 				continue
 			}
-			if r := d.rt[name]; r != nil && (r.up || r.ldapNow) {
+			if !deliveryStage(h) {
+				if h.ReadyAt != 0 {
+					d.ldapNoBackup(j, name, "전달 시점 백업 없음")
+				}
+				continue
+			}
+			if r := d.rt[name]; r != nil && !r.startCheck && (r.up || r.ldapNow) && !now.Before(r.ldapNext) {
 				cand = append(cand, name)
 			}
 		}
@@ -628,8 +696,18 @@ func (d *Daemon) ldapBackup() {
 			r.ldapNow = false
 			// 막 os6 로 판별된 호스트가 응답하지 않으면 켜져 있는지 아직 모른다 — 기록하지 않고 종전 규칙에 맡긴다
 			// (ping O 가 되면 그때 백업, ping X 면 "전달 시점 ping X": 처음부터 접속불가 호스트는 os8 호스트와 같은 결과)
-			if early && (!ok || st.Backup != LdapBackupOK && (st.Reason == ldapNoResp || strings.HasPrefix(st.Reason, ldapCallFail))) {
+			if early && (!ok || ldapTransient(st)) {
 				continue
+			}
+			// 일시적 실패는 확정하지 않고 다음 주기(ldapRetryGap 뒤)에 다시 시도 — seen_down·READY 가 되면 그때 이 사유로 none
+			if ok && ldapTransient(st) {
+				r.ldapTries++
+				r.ldapWhy = st.Reason
+				if r.ldapTries < ldapRetryMax {
+					r.ldapNext = now.Add(ldapRetryGap)
+					logf("[!] LDAP 백업 재시도 예정: %s (job %s, %d/%d회) - %s", n, j.ID, r.ldapTries, ldapRetryMax, st.Reason)
+					continue
+				}
 			}
 			nRec++
 			if !ok || st.Backup == "" {
@@ -651,8 +729,14 @@ func (d *Daemon) ldapBackup() {
 	}
 }
 
-// ldapApply: READY 직후 LDAP 비교·적용 (os_check run 전). stage=ldap 를 저장해 두고 호출. 늦은 READY 보류 호스트는 하지 않는다.
+// ldapApply: READY 직후 LDAP 비교 (os_check run 전). stage=ldap 를 저장해 두고 호출. 늦은 READY 보류 호스트는 하지 않는다.
+// 기본은 비교만(Probe) — 복원이 필요하면 '복원 대기(명령 필요)' 로 두고 run 은 그대로 진행, 복원은 request ldap-restore 로.
+// conf ldap_auto_restore=y 면 비교 후 바로 복원(Restore).
 func (d *Daemon) ldapApply(j *Job, name string, t int64) {
+	// 전달 시점 백업 없이 READY 가 된 호스트(ping X 를 못 본 빠른 재부팅·NoPing/수동 재시도 확인 등)는 조용히 건너뛰지 않고 명시 기록
+	if d.ldapOn() && j.Hosts[name].Ldap == nil {
+		d.ldapNoBackup(j, name, "전달 시점 백업 없음")
+	}
 	if held(j.Hosts[name]) {
 		return
 	}
@@ -671,7 +755,12 @@ func (d *Daemon) ldapApplyNow(j *Job, name string, t int64) {
 			logf("[X] job 저장 실패(%s): %v", j.ID, err)
 		}
 	}
-	st := d.Ldap.Apply(j, name)
+	var st LdapState
+	if ldapAutoRestore() {
+		st = d.Ldap.Restore(j, name)
+	} else {
+		st = d.Ldap.Probe(j, name)
+	}
 	if st.Backup == "" {
 		st.Backup = h.Ldap.Backup
 	}
@@ -680,6 +769,9 @@ func (d *Daemon) ldapApplyNow(j *Job, name string, t int64) {
 	msg := fmt.Sprintf("LDAP 확인: %s (job %s) binddn=%s applied=%v", name, j.ID, st.Bindpw, st.Applied)
 	if st.Reason != "" {
 		msg += " (" + st.Reason + ")"
+	}
+	if ldapPending(&st) {
+		msg += fmt.Sprintf(" — 복원: auto_setup request %s %s %s (TUI l)", ReqLdapRestore, j.ID, name)
 	}
 	logf("%s", msg)
 }
