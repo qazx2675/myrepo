@@ -2,9 +2,12 @@ package reader
 
 import (
 	"cmp"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/xuri/efp"
 	"github.com/xuri/excelize/v2"
@@ -14,8 +17,11 @@ import (
 // 수식은 참조를 전이적으로 따라가, 계산할 수 없는 셀에 의존하지 않을 때만 값을 쓴다.
 // 참조 그래프를 Tarjan 알고리즘(재귀 없음)으로 훑으며 의존 대상부터 계산한다.
 
-// maxAlias 는 배열 수식·병합 영역 하나에서 등록하는 셀 수의 상한이다.
+// maxAlias 를 넘는 배열 수식·병합 영역은 셀마다 등록하지 않고 사각형 겹침으로 검사한다.
 const maxAlias = 10000
+
+// absolutePart 는 $ 로 완전히 고정된 셀, 열, 행이다.
+var absolutePart = regexp.MustCompile(`^(\$[A-Za-z]+(\$[0-9]+)?|\$[0-9]+)$`)
 
 type cellPos struct{ row, col int }
 
@@ -31,10 +37,17 @@ type formulaEntry struct {
 	src cellPos
 }
 
+// bigArea 는 maxAlias 를 넘는 배열 수식·병합 영역이다.
+type bigArea struct {
+	r1, c1, r2, c2 int
+	src            cellPos
+}
+
 type formulaSheet struct {
 	name   string
 	cols   map[int][]formulaEntry // 열 번호 -> 행 번호 오름차순
 	copies map[cellPos]bool       // 공유 수식을 이어받은 셀
+	big    []bigArea
 }
 
 type nodeKind uint8
@@ -134,8 +147,15 @@ func (a *analyzer) formulaSheet(p *sheetParser) (formulaSheet, error) {
 	// 영역의 각 셀을 기준 셀의 수식으로 등록한다.
 	alias := func(ref string, src cellPos) {
 		r1, c1, r2, c2, ok := parseArea(ref)
-		for n, r := 0, r1; ok && r <= r2 && n < maxAlias; r++ {
-			for c := c1; c <= c2 && n < maxAlias; c, n = c+1, n+1 {
+		if !ok {
+			return
+		}
+		if (r2-r1+1)*(c2-c1+1) > maxAlias {
+			s.big = append(s.big, bigArea{r1, c1, r2, c2, src})
+			return
+		}
+		for r := r1; r <= r2; r++ {
+			for c := c1; c <= c2; c++ {
 				add(cellPos{r, c}, src)
 			}
 		}
@@ -243,7 +263,9 @@ func (a *analyzer) evaluate(v int) {
 	axis, err := excelize.CoordinatesToCellName(k.b, k.a)
 	var raw, shown string
 	if err == nil && !n.bad {
-		raw, shown, err = calcValue(a.f, s.name, axis, isPending && ref.styled)
+		// 소문자 주소로 계산한다. 계산 중인 셀 자신을 참조하면(ROW(A2) 등) excelize 가 빈 값을
+		// 참조 캐시에 남기는데, 소문자 주소면 다른 수식이 읽는 항목("시트!A2")과 겹치지 않는다.
+		raw, shown, err = calcValue(a.f, s.name, strings.ToLower(axis), isPending && ref.styled)
 		n.bad = err != nil
 	}
 	if !isPending {
@@ -272,6 +294,11 @@ func (a *analyzer) expand(k nodeKey) (edges []int, bad bool) {
 			lo, _ := slices.BinarySearchFunc(list, k.a, byRow)
 			hi, _ := slices.BinarySearchFunc(list, k.b+1, byRow)
 			edges = a.cover(edges, k.sheet, col, 0, len(list), lo, hi)
+		}
+		for _, g := range a.sheets[k.sheet].big {
+			if g.r1 <= k.b && k.a <= g.r2 && g.c1 <= k.d && k.c <= g.c2 {
+				edges = append(edges, a.id(nodeKey{kind: cellNode, sheet: k.sheet, a: g.src.row, b: g.src.col}))
+			}
 		}
 		return edges, false
 	case segmentNode:
@@ -327,25 +354,86 @@ func (a *analyzer) formulaEdges(k nodeKey) (edges []int, bad bool) {
 		return nil, true
 	}
 	shared := a.sheets[k.sheet].copies[cellPos{k.a, k.b}]
-	for _, t := range tokens {
+	for i, t := range tokens {
 		switch {
 		case t.TType == efp.TokenTypeFunction && t.TSubType == efp.TokenSubTypeStart:
 			if !a.supported(t.TValue) {
 				return nil, true
 			}
 		case t.TType == efp.TokenTypeOperand && t.TSubType == efp.TokenSubTypeRange:
-			// excelize 는 공유 수식의 시트 지정 참조를 이동시키지 못해 틀린 셀을 읽는다.
-			if shared && strings.Contains(t.TValue, "!") {
+			if shared && !a.sharedSafe(t.TValue) {
 				return nil, true
 			}
 			target, ok := a.resolve(k.sheet, t.TValue)
 			if !ok {
 				return nil, true
 			}
-			edges = append(edges, a.id(target))
+			targets := []nodeKey{target}
+			if positionArg(tokens, i) {
+				targets = withoutCell(target, k)
+			}
+			for _, t := range targets {
+				edges = append(edges, a.id(t))
+			}
 		}
 	}
 	return edges, false
+}
+
+// sharedSafe 는 공유 수식 복사 셀의 참조를 excelize 가 바르게 읽는지 본다. excelize 는 시트 지정
+// 참조에서 시트가 붙은 부분을 이동시키지 못하므로 모든 부분이 절대 참조여야 한다. 시트 이름의
+// 따옴표도 사라져 'Q1-Data'!$A$1 이 Q1-Data!$A$1 이 되므로, 잘린 이름일 수 있으면 거부한다.
+func (a *analyzer) sharedSafe(ref string) bool {
+	if !strings.Contains(ref, "!") {
+		return true
+	}
+	for _, part := range strings.Split(ref, ":") {
+		if bang := strings.LastIndex(part, "!"); bang >= 0 {
+			name := strings.ToLower(part[:bang])
+			for _, s := range a.sheets {
+				head, ok := strings.CutSuffix(strings.ToLower(s.name), name)
+				last, _ := utf8.DecodeLastRuneInString(head)
+				if ok && head != "" && last != '_' && !unicode.IsLetter(last) && !unicode.IsDigit(last) {
+					return false
+				}
+			}
+			part = part[bang+1:]
+		}
+		if !absolutePart.MatchString(part) {
+			return false
+		}
+	}
+	return true
+}
+
+// withoutCell 은 사각형 r 에서 수식 셀 k 자신을 뺀 사각형들이다. 위치만 쓰는 자기 참조는 순환이
+// 아니다. 다른 셀은 의존으로 남긴다. 빼면 excelize 가 되돌아오는 참조를 빈 값으로 계산해 둔다.
+func withoutCell(r, k nodeKey) []nodeKey {
+	if r.sheet != k.sheet || k.a < r.a || k.a > r.b || k.b < r.c || k.b > r.d {
+		return []nodeKey{r}
+	}
+	above, below, left, right := r, r, r, r
+	above.b, below.a = k.a-1, k.a+1
+	left.a, left.b, left.d = k.a, k.a, k.b-1
+	right.a, right.b, right.c = k.a, k.a, k.b+1
+	return slices.DeleteFunc([]nodeKey{above, below, left, right}, func(x nodeKey) bool { return x.a > x.b || x.c > x.d })
+}
+
+// positionArg 는 tokens[i] 가 ROW 류 함수의 인수 그 자체인지 본다. 이때는 위치만 쓰고 값은 쓰지 않는다.
+func positionArg(tokens []efp.Token, i int) bool {
+	if i == 0 || i+1 >= len(tokens) {
+		return false
+	}
+	open, end := tokens[i-1], tokens[i+1]
+	if open.TType != efp.TokenTypeFunction || open.TSubType != efp.TokenSubTypeStart ||
+		end.TType != efp.TokenTypeFunction || end.TSubType != efp.TokenSubTypeStop {
+		return false
+	}
+	switch strings.ToUpper(open.TValue) {
+	case "ROW", "COLUMN", "ROWS", "COLUMNS":
+		return true
+	}
+	return false
 }
 
 // supported 는 excelize 가 함수를 지원하는지 본다. 동적 참조 함수는 의존 대상을 알 수 없어 제외한다.
@@ -391,6 +479,10 @@ func (a *analyzer) resolve(sheet int, ref string) (nodeKey, bool) {
 		return nodeKey{}, false
 	}
 	parts := strings.Split(strings.ReplaceAll(ref, "$", ""), ":")
+	// 3차원 참조(Jan:Mar!B2)의 앞 시트 이름을 열 이름으로 읽지 않는다.
+	if strings.Contains(ref, "!") && !strings.Contains(parts[0], "!") {
+		return nodeKey{}, false
+	}
 	target := -1
 	for i, part := range parts {
 		if bang := strings.LastIndex(part, "!"); bang >= 0 {

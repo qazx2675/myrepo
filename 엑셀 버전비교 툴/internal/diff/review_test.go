@@ -2,6 +2,7 @@ package diff
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,17 @@ func TestKeyDuplicatedOnOtherSide(t *testing.T) {
 		if got := alignRows(c.old, c.new, 1).old.mate; !equalInts(got, c.mate) {
 			t.Error(c.name, got, c.mate)
 		}
+	}
+}
+
+// 상대 파일에서 중복이라 키로 비교하지 않은 행도 경고에 나와야 한다.
+func TestKeyWarningIncludesOtherSideDuplicate(t *testing.T) {
+	old := sheetOf([][]string{{"id"}, {"A"}, {"B"}})
+	new := sheetOf([][]string{{"id"}, {"A"}, {"A"}, {"B"}})
+	w := newAligner(old, new, []ColPair{{Old: 1, New: 1}}, interner{}).matchKeys(1, 1, "S", "S")
+	if len(w) != 2 || !strings.Contains(w[0].Message, "[이전 파일]") || !strings.Contains(w[0].Message, "1개 행") ||
+		!strings.Contains(w[0].Message, "(행: 2)") || !strings.Contains(w[1].Message, "(행: 2, 3)") {
+		t.Error(w)
 	}
 }
 

@@ -104,7 +104,7 @@ func (a *aligner) pair(o, n int) { a.old.mate[o], a.new.mate[n] = n, o }
 // matchKeys 는 양쪽에서 각각 하나뿐인 키를 가진 행을 키로 짝짓는다.
 func (a *aligner) matchKeys(oldCol, newCol int, oldName, newName string) []reader.Warning {
 	var warnings []reader.Warning
-	index := func(s *side, col int, label, sheet string) (map[string]int, map[string]int) {
+	index := func(s *side, col int) ([]string, map[string]int) {
 		keys := make([]string, len(s.rows))
 		count := map[string]int{}
 		for i := range s.rows {
@@ -115,13 +115,21 @@ func (a *aligner) matchKeys(oldCol, newCol int, oldName, newName string) []reade
 				count[keys[i]]++
 			}
 		}
+		return keys, count
+	}
+	oldAll, oldCount := index(&a.old, oldCol)
+	newAll, newCount := index(&a.new, newCol)
+	// 이 파일에서 하나뿐인 키를 돌려주고, 키로 비교하지 않는 행은 경고한다.
+	pick := func(s *side, keys []string, count, other map[string]int, label, sheet string) map[string]int {
 		unique := map[string]int{}
 		var bad []string
 		total := 0
 		for i, k := range keys {
 			if k != "" && count[k] == 1 {
 				unique[k] = i
-				continue
+				if other[k] <= 1 {
+					continue
+				}
 			}
 			total++
 			if len(bad) < 10 {
@@ -130,13 +138,13 @@ func (a *aligner) matchKeys(oldCol, newCol int, oldName, newName string) []reade
 		}
 		if total > 0 {
 			warnings = append(warnings, reader.Warning{Sheet: sheet, Message: fmt.Sprintf(
-				"[%s 파일] 키가 비었거나 중복되거나 확인 불가인 %d개 행은 자동 정렬로 비교했습니다(행: %s)",
+				"[%s 파일] 키가 비었거나 확인 불가이거나 어느 한쪽 파일에서 중복인 %d개 행은 자동 정렬로 비교했습니다(행: %s)",
 				label, total, strings.Join(bad, ", "))})
 		}
-		return unique, count
+		return unique
 	}
-	oldKeys, oldCount := index(&a.old, oldCol, "이전", oldName)
-	newKeys, newCount := index(&a.new, newCol, "최신", newName)
+	oldKeys := pick(&a.old, oldAll, oldCount, newCount, "이전", oldName)
+	newKeys := pick(&a.new, newAll, newCount, oldCount, "최신", newName)
 	// 상대 파일에서 중복인 키의 행은 자동 정렬에 맡긴다.
 	for k, i := range oldKeys {
 		a.old.fixed[i] = newCount[k] <= 1
