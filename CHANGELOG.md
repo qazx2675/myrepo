@@ -1,5 +1,11 @@
 # CHANGELOG.md — ip_change
 
+## 2026-11-27 (추가) — usb0 제외, CRLF 처리
+
+- `DEVICE`(없으면 파일명)가 `usb0` 인 ifcfg 는 대상에서 제외.
+- CRLF 줄바꿈 ifcfg 의 `IPADDR` 을 인식. 수정한 파일은 전체를 LF 로 저장(백업은 원본 그대로).
+- `bin/ip-change-engine_os6`, `_os8` 다시 빌드.
+
 ## 2026-11-27 — 빈 `IPADDR=` ifcfg 적용
 
 - IP 가 일치하는 ifcfg 가 없으면, 값이 빈 `IPADDR=` 파일 중 장치에 IPv4 가 있는 파일을 골라 적용. 후보가 둘 이상이면 실패.

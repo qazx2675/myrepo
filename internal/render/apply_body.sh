@@ -8,6 +8,7 @@
 #   3. NETWORK_SCRIPTS_DIR(또는 RHEL 9+ 이면 RHEL9_PATH) 안에서, IPADDR 값이
 #      2번 목록에 있는 ifcfg-* 파일을 찾음(= 지금 서비스 중인 IP). 백업(.bak)은 제외.
 #      없으면 값이 빈 "IPADDR=" 파일 중, 그 장치에 IPv4 가 있는 것을 찾음
+#      usb0 은 제외. CRLF 줄바꿈 파일도 인식하며, 수정한 파일은 LF 로 저장
 #   4. 그 파일을 .bak.<STAMP> 로 백업한 뒤 IPADDR/GATEWAY 두 줄만 갱신
 #      (파일을 통째로 덮어쓰지 않음). 네트워크 서비스는 재시작하지 않음
 #   5. 갱신 결과를 다시 읽어 검증
@@ -101,14 +102,24 @@ fi
 # 4. LOCAL_IPS 중 하나가 등록된 ifcfg 파일 찾기 (= 지금 서비스 중인 IP)
 #------------------------------------------------------------------------------
 
+# ifcfg 파일의 장치 이름 (DEVICE 값, 없으면 파일명). usb0(BMC 연결용)은 대상에서 제외합니다.
+ifcfg_dev()
+{
+    local d
+    d="$(grep -i '^[[:space:]]*DEVICE[[:space:]]*=' "$1" | tail -n1 | cut -d= -f2- | tr -d '"'"'"' \t\r')"
+    [ -z "$d" ] && d="${1##*/ifcfg-}"
+    echo "$d"
+}
+
 TARGET_FILE=""
 CUR_IP=""
 for f in "$SEARCH_DIR"/ifcfg-*; do
     [ -f "$f" ] || continue
     case "$f" in *.bak*) continue ;; esac
+    [ "$(ifcfg_dev "$f")" = "usb0" ] && continue
     line="$(grep -i '^[[:space:]]*IPADDR[[:space:]]*=' "$f" | tail -n1)"
     [ -z "$line" ] && continue
-    val="$(echo "$line" | cut -d= -f2- | tr -d '"'"'"' \t')"
+    val="$(echo "$line" | cut -d= -f2- | tr -d '"'"'"' \t\r')"
     for ip in $LOCAL_IPS; do
         if [ "$val" = "$ip" ]; then
             if [ -n "$TARGET_FILE" ]; then
@@ -134,8 +145,8 @@ if [ -z "$TARGET_FILE" ]; then
         [ -z "$line" ] && continue
         val="$(echo "$line" | cut -d= -f2- | tr -d '"'"'"' \t\r')"
         [ -n "$val" ] && continue
-        dev="$(grep -i '^[[:space:]]*DEVICE[[:space:]]*=' "$f" | tail -n1 | cut -d= -f2- | tr -d '"'"'"' \t\r')"
-        [ -z "$dev" ] && dev="${f##*/ifcfg-}"
+        dev="$(ifcfg_dev "$f")"
+        [ "$dev" = "usb0" ] && continue
         ip="$(echo "$DEV_IPS" | awk -v d="$dev" '$1==d {print $2; exit}')"
         [ -z "$ip" ] && continue
         if [ -n "$TARGET_FILE" ]; then
@@ -168,6 +179,7 @@ set_ifcfg_key()
     AWK_K="$key" AWK_V="$val" awk '
         BEGIN { k = ENVIRON["AWK_K"]; v = ENVIRON["AWK_V"]; done = 0 }
         {
+            sub(/\r$/, "")
             line = $0
             sub(/^[ \t]+/, "", line)
             first = line
@@ -197,8 +209,8 @@ set_ifcfg_key "$TARGET_FILE" GATEWAY "$GATEWAY"
 # 7. 검증 (재시작 없음)
 #------------------------------------------------------------------------------
 
-check_ip="$(grep -i '^[[:space:]]*IPADDR[[:space:]]*=' "$TARGET_FILE" | tail -n1 | cut -d= -f2- | tr -d '"'"'"' \t')"
-check_gw="$(grep -i '^[[:space:]]*GATEWAY[[:space:]]*=' "$TARGET_FILE" | tail -n1 | cut -d= -f2- | tr -d '"'"'"' \t')"
+check_ip="$(grep -i '^[[:space:]]*IPADDR[[:space:]]*=' "$TARGET_FILE" | tail -n1 | cut -d= -f2- | tr -d '"'"'"' \t\r')"
+check_gw="$(grep -i '^[[:space:]]*GATEWAY[[:space:]]*=' "$TARGET_FILE" | tail -n1 | cut -d= -f2- | tr -d '"'"'"' \t\r')"
 
 if [ "$check_ip" != "$NEW_IP" ] || [ "$check_gw" != "$GATEWAY" ]; then
     fail_out "$TARGET_FILE 갱신 검증 실패 (IPADDR=$check_ip GATEWAY=$check_gw)"
