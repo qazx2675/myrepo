@@ -41,6 +41,32 @@ func PollJob(client *awx.Client, jobID int, intervalSec int) (*awx.Job, error) {
 	}
 }
 
+// WaitJobEvents는 끝난 Job의 출력(event)이 모두 저장될 때까지 최대 timeout 동안 기다린다.
+// Job 상태가 successful이어도 저장이 덜 끝났으면 stdout이 잘린 채 내려온다.
+func WaitJobEvents(client *awx.Client, job *awx.Job, intervalSec int, timeout time.Duration) error {
+	if intervalSec <= 0 {
+		intervalSec = 3
+	}
+	deadline := time.Now().Add(timeout)
+	for waiting := false; !job.EventsSaved; {
+		left := time.Until(deadline)
+		if left <= 0 {
+			return fmt.Errorf("Job %d 출력 저장이 %v 안에 끝나지 않았습니다 — 잘린 결과를 막기 위해 저장하지 않습니다. 잠시 후 다시 실행하세요", job.ID, timeout)
+		}
+		if !waiting {
+			fmt.Printf("    [job %d] 출력 저장 완료 대기 중 (최대 %v)\n", job.ID, timeout)
+			waiting = true
+		}
+		time.Sleep(min(time.Duration(intervalSec)*time.Second, left))
+		next, err := client.GetJob(job.ID)
+		if err != nil {
+			return err
+		}
+		job = next
+	}
+	return nil
+}
+
 // PollInventoryUpdate는 인벤토리 동기화가 최종 상태가 될 때까지 intervalSec 간격으로 상태를 조회한다.
 func PollInventoryUpdate(client *awx.Client, updateID int, intervalSec int) (*awx.InventoryUpdate, error) {
 	if intervalSec <= 0 {

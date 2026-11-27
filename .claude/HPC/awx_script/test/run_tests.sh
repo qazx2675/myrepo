@@ -936,6 +936,20 @@ case8() {
 	t_notmp
 	case_end
 
+	case_begin "8e" "nodeinfo 결과에서 서버 누락 → 누락 이름 출력, 중단, ${TU}.txt 는 입력 목록으로 복원"
+	setup_case
+	seed_nodeinfo D6; export NODEINFO_MODE=msg
+	echo "missinghost01" >> "$W/$TU.txt"
+	pre=$(cksum < "$W/$TU.txt")
+	run01 'Y\nY\n'
+	post=$(cksum < "$W/$TU.txt")
+	t_rc "종료코드≠0" "$RC" nz
+	t_has "누락 서버 출력" "$OUT" '^\[X\] 파싱 결과에 없는 서버 \(1/[0-9]+대\) : missinghost01$'
+	t_eq "${TU}.txt 복원" "$post" "$pre"
+	t_eq "ssh/scp 미호출" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
+	t_notmp
+	case_end
+
 	case_begin "8c" "작업진행 N → delhost 미호출 / Y 입력 전엔 미호출, Y 이후에만 delhost"
 	setup_case
 	seed_raw D6

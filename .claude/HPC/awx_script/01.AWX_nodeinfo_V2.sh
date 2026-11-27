@@ -116,6 +116,10 @@ if [[ $AWX_AUTO == 1 && $AWX_AUTO_NODEINFO == [YyNn] ]]; then
 		read -r -p " awx nodeinfo 사용여부 Y|N : " awx_yn
 	fi
 	if [[ $awx_yn == [Yy] ]]; then
+		# 대수 검사([3-0])용: 덮어쓰기 전의 입력 파일과 hostname 목록 보관
+		input_orig=$(mktemp); input_hosts=$(mktemp); add_tmp "$input_orig" "$input_hosts"
+		cat "${start_pwd}/${user}.txt" > "$input_orig" 2>/dev/null
+		sed 's/#.*//' "$input_orig" | tr ',|\r' '   ' | tr -s '[:space:]' '\n' | grep . | LC_ALL=C sort -u > "$input_hosts"
 		# nodeinfo 실패 시 ${user}.txt(입력 호스트 목록)를 덮어쓰지 않고 종료
 		bash awxkit/nodeinfo.sh -user ${user} -hosts "${start_pwd}/${user}.txt" || { err "[X] nodeinfo 실행 실패 (${user}.txt 는 변경하지 않음)"; exit 1; }
 		[[ -f awxkit/output/${user}_nodeinfo.yaml ]] || { err "[X] awxkit/output/${user}_nodeinfo.yaml 없음"; exit 1; }
@@ -146,6 +150,18 @@ parse_msg() {
 		err "[X] ${user}.txt 는 12필드(13번째는 분류용 선택 항목) 형식(msg 값 또는 vendor model infra hostname ip mac nic disk part 용량 os boot [분류])이어야 합니다"
 		exit 1
 	}
+}
+
+# [3-0] 대수 검사: nodeinfo 에 넣은 hostname 이 파싱 결과(4번째 필드)에 모두 있어야 한다. 누락이 있으면 입력 파일을 되돌리고 중단
+verify_parsed() {
+	[[ -n $input_hosts ]] || return 0
+	local missing
+	missing=$(LC_ALL=C comm -23 "$input_hosts" <(awk '{ print $4 }' "${user}.txt" | LC_ALL=C sort -u))
+	[[ -z $missing ]] && return 0
+	err "[X] 파싱 결과에 없는 서버 ($(printf '%s\n' "$missing" | grep -c .)/$(grep -c . "$input_hosts")대) : $(printf '%s\n' "$missing" | paste -sd' ' -)"
+	cat "$input_orig" > "${user}.txt"
+	err "[X] 작업을 중단합니다. ${user}.txt 는 입력 목록으로 되돌렸습니다 (nodeinfo 결과: awxkit/output/${user}_nodeinfo.yaml)"
+	exit 1
 }
 
 # [3-1] 등록되지 않은 infra 이름 치환 (infra_alias="from:to ..."), 3번째 필드
@@ -794,6 +810,8 @@ log "[2] download_txt"
 download_txt
 log "[3] parse_msg"
 parse_msg
+log "[3-0] verify_parsed"
+verify_parsed
 log "[3-1] apply_infra_alias"
 apply_infra_alias
 log "[4] fix_mac"

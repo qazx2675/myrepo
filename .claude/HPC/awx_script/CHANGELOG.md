@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [Unreleased] - 2026-11-27
+
+### 수정
+- **nodeinfo 결과가 간헐적으로 일부 서버만 파싱되던 문제** (awxkit `awxkit-nodeinfo`, `s1_fetch=stdout`): job 이 `successful` 이어도 AWX 가 출력 저장을 끝내기 전에 stdout 을 받으면 잘린 채 내려왔다. 이제 `event_processing_finished` 가 true 가 될 때까지 **최대 60초**(job 실행 시간 제외) 기다린 뒤 받고, 넘으면 결과를 저장하지 않고 실패로 끝낸다. **바이너리를 다시 빌드해야 적용된다** (`awxkit/setup.sh`)
+- 01 `[3-0] verify_parsed` 추가: nodeinfo 에 넣은 hostname 이 파싱 결과(4번째 필드)에 하나라도 없으면 누락 서버를 출력하고 삭제·등록 전에 중단하며 `${user}.txt` 를 입력 목록으로 되돌린다. hostname 은 글자가 정확히 같아야 한다. 테스트 케이스 8e
+
 ## [Unreleased] - 2026-11-10
 
 ### 변경

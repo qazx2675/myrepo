@@ -226,6 +226,8 @@ type Job struct {
 	Status    string                 `json:"status"` // pending/waiting/running/successful/failed/error/canceled
 	Failed    bool                   `json:"failed"`
 	Artifacts map[string]interface{} `json:"artifacts"`
+	// EventsSaved는 Job의 출력(event)이 모두 DB에 저장됐는지 여부다. false인 동안의 stdout은 일부만 담길 수 있다.
+	EventsSaved bool `json:"event_processing_finished"`
 }
 
 // GetJob은 Job 상태를 조회한다.

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"awxkit/awx"
 	"awxkit/cli"
@@ -128,11 +129,17 @@ func main() {
 	cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=successful output=%s", user, len(hosts), job.ID, outPath))
 }
 
+// eventWaitTimeout은 Job 종료 후 출력 저장 완료를 기다리는 최대 시간이다 (Job 실행 시간은 포함하지 않는다).
+const eventWaitTimeout = 60 * time.Second
+
 // saveNodeInfoResult는 cfg.S1Fetch 설정에 따라 결과를 취득해 outPath에 저장한다.
 // s1_fetch=remote인 경우 API로 파일을 받을 수 없으므로 안내만 출력한다.
 func saveNodeInfoResult(client *awx.Client, cfg *config.Config, job *awx.Job, outPath string) error {
 	switch cfg.S1Fetch {
 	case "stdout":
+		if err := cli.WaitJobEvents(client, job, cfg.PollIntervalSec, eventWaitTimeout); err != nil {
+			return err
+		}
 		content, err := client.GetJobStdout(job.ID)
 		if err != nil {
 			return err

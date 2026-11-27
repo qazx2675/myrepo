@@ -31,6 +31,7 @@
 | [1] | `user()` | (현장 코드) | `$user` 설정, 로그 파일 열기 |
 | [2] | `download_txt()` | 프롬프트 Y/N | `${user}.txt` (12필드 또는 nodeinfo YAML) |
 | [3] | `parse_msg()` | `${user}.txt` | msg 행 파싱, 12필드(13번째 분류 태그 선택) 검증 또는 종료. 13번째는 치환 없이 그대로 보관 |
+| [3-0] | `verify_parsed()` | nodeinfo 입력 hostname, `${user}.txt` | nodeinfo 를 실행한 경우, 파싱 결과에 없는 서버가 있으면 이름 출력·입력 파일 복원 후 종료 |
 | [3-1] | `apply_infra_alias()` | `${user}.txt`, `infra_alias` | 3번째 필드(infra)의 미등록 이름을 치환하고 건수 출력 |
 | [4] | `fix_mac()` | `${user}.txt` | MAC 짝수 보정 (spice/pice/dspr/pspr + ev 미포함) |
 | [4-1] | `dns_check()` (+ `dns_server_spec`·`dns_read_conf`·`dns_cands`·`dns_ask`·`dns_lookup_a`·`dns_worker`·`dns_batch`·`dns_ptr_worker`) | `${user}.txt`, `/etc/resolv.conf`(`AWX_RESOLV_CONF`) | resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의(dig → nslookup, `xargs -P 32`, 질의당 2초·재시도 1회)해 판정 5종·중복 경고(목록·DNS·PTR) 표 출력, 불일치면 a/n/s/q (auto 모드는 `/dev/tty` y/N, `AWX_DNS_CHECKED=1` 은 표만), 교체는 5번째 필드만 + LOG `[DNS]`. auto_setup `dnscheck.go` 와 같은 규칙 |
