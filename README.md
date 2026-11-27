@@ -105,7 +105,8 @@ cd scripts
      (`getent hosts` 는 `/etc/hosts`·DNS 에 좌우돼 쓰지 않음 — IPv4 항목이 없거나
      IPv6 만 등록된 노드가 있었음)
    - `network_scripts_dir`(RHEL 9+ 이고 `rhel9_path` 가 설정돼 있으면 그 경로) 안에서
-     `IPADDR=<현재 서비스 IP>` 인 ifcfg 파일 탐색
+     `IPADDR=<현재 서비스 IP>` 인 ifcfg 파일 탐색 (백업 `.bak` 파일 제외). 없으면 값이 빈 `IPADDR=`
+     파일 중, 장치(`DEVICE`, 없으면 파일명)에 IPv4 가 있는 파일 하나를 선택
    - 원본을 `.bak.<시각>` 백업 후 `IPADDR`/`GATEWAY` 두 줄만 갱신
    - 게이트웨이는 변경 IP의 마지막 옥텟을 `1` 로 바꾼 값 (예: `3.3.3.3` → `3.3.3.1`)
    - 갱신 결과를 다시 읽어 검증

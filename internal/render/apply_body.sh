@@ -6,7 +6,8 @@
 #   2. 이 노드에 실제로 할당된 IPv4 주소 목록을 구함 (hosts/DNS 에 의존하지 않음 —
 #      /etc/hosts 에 IPv4 항목이 없거나 IPv6 만 등록된 노드가 실제로 있었음)
 #   3. NETWORK_SCRIPTS_DIR(또는 RHEL 9+ 이면 RHEL9_PATH) 안에서, IPADDR 값이
-#      2번 목록에 있는 ifcfg-* 파일을 찾음(= 지금 서비스 중인 IP)
+#      2번 목록에 있는 ifcfg-* 파일을 찾음(= 지금 서비스 중인 IP). 백업(.bak)은 제외.
+#      없으면 값이 빈 "IPADDR=" 파일 중, 그 장치에 IPv4 가 있는 것을 찾음
 #   4. 그 파일을 .bak.<STAMP> 로 백업한 뒤 IPADDR/GATEWAY 두 줄만 갱신
 #      (파일을 통째로 덮어쓰지 않음). 네트워크 서비스는 재시작하지 않음
 #   5. 갱신 결과를 다시 읽어 검증
@@ -104,6 +105,7 @@ TARGET_FILE=""
 CUR_IP=""
 for f in "$SEARCH_DIR"/ifcfg-*; do
     [ -f "$f" ] || continue
+    case "$f" in *.bak*) continue ;; esac
     line="$(grep -i '^[[:space:]]*IPADDR[[:space:]]*=' "$f" | tail -n1)"
     [ -z "$line" ] && continue
     val="$(echo "$line" | cut -d= -f2- | tr -d '"'"'"' \t')"
@@ -117,6 +119,32 @@ for f in "$SEARCH_DIR"/ifcfg-*; do
         fi
     done
 done
+
+#------------------------------------------------------------------------------
+# 4-1. IPADDR 일치 파일이 없으면, 값이 빈 "IPADDR=" 파일을 인터페이스 이름으로 찾기
+#      (DEVICE 값, 없으면 파일명의 ifcfg- 뒤 이름. 그 장치에 IPv4 가 있어야 함)
+#------------------------------------------------------------------------------
+
+if [ -z "$TARGET_FILE" ]; then
+    DEV_IPS="$(ip -4 -o addr show scope global 2>/dev/null | awk '{sub(/@.*/,"",$2); split($4,a,"/"); print $2, a[1]}')"
+    for f in "$SEARCH_DIR"/ifcfg-*; do
+        [ -f "$f" ] || continue
+        case "$f" in *.bak*|*/ifcfg-lo) continue ;; esac
+        line="$(grep -i '^[[:space:]]*IPADDR[[:space:]]*=' "$f" | tail -n1)"
+        [ -z "$line" ] && continue
+        val="$(echo "$line" | cut -d= -f2- | tr -d '"'"'"' \t\r')"
+        [ -n "$val" ] && continue
+        dev="$(grep -i '^[[:space:]]*DEVICE[[:space:]]*=' "$f" | tail -n1 | cut -d= -f2- | tr -d '"'"'"' \t\r')"
+        [ -z "$dev" ] && dev="${f##*/ifcfg-}"
+        ip="$(echo "$DEV_IPS" | awk -v d="$dev" '$1==d {print $2; exit}')"
+        [ -z "$ip" ] && continue
+        if [ -n "$TARGET_FILE" ]; then
+            fail_out "IPADDR 이 비어 있고 IPv4 가 있는 ifcfg 파일이 둘 이상입니다: $TARGET_FILE, $f"
+        fi
+        TARGET_FILE="$f"
+        CUR_IP="$ip"
+    done
+fi
 
 if [ -z "$TARGET_FILE" ]; then
     fail_out "$SEARCH_DIR 에서 이 노드의 IPv4($(echo "$LOCAL_IPS" | tr '\n' ' '))와 일치하는 ifcfg 파일을 찾지 못했습니다"

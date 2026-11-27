@@ -1,5 +1,12 @@
 # CHANGELOG.md — ip_change
 
+## 2026-11-27 — 빈 `IPADDR=` ifcfg 적용
+
+- IP 가 일치하는 ifcfg 가 없으면, 값이 빈 `IPADDR=` 파일 중 장치에 IPv4 가 있는 파일을 골라 적용. 후보가 둘 이상이면 실패.
+- ifcfg 탐색에서 백업(`.bak`) 파일 제외.
+- `BOOTPROTO`·`NETMASK`/`PREFIX` 는 바꾸지 않음.
+- `bin/ip-change-engine_os6`, `_os8` 다시 빌드. 테스트하지 않음.
+
 ## 2026-10-12 — `go.mod` `go 1.20` · os6 정적 바이너리 `bin/ip-change-engine_os6`
 
 - `go.mod`: `go 1.26.5` → `go 1.20`. Go 1.20·1.25 툴체인이 1.26.5 를 거부해 빌드할 수 없었음. 소스는 그대로이므로 동작은 바뀌지 않음.
