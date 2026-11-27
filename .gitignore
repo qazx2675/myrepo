@@ -4,3 +4,4 @@ conf/ip_change.conf
 !conf/*.sample
 bin/*
 !bin/*_os6
+!bin/*_os8

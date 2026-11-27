@@ -27,7 +27,7 @@ Red Hat Enterprise Linux 대상 노드들의 **IP·게이트웨이 설정을 일
 | 항목 | 필요 위치 | 비고 |
 |---|---|---|
 | Go 툴체인 | 관리 노드 | `go.mod` 기준 1.26.5. 빌드할 때만 필요 |
-| `gossh` | 관리 노드 | 저장소의 [`.claude/공통/gossh/v2`](../../공통/gossh/v2/) |
+| `gossh` | 관리 노드 | 저장소의 [`gossh-standalone` 브랜치](https://github.com/qazx2675/myrepo/tree/gossh-standalone) |
 | bash / awk / sed / `hostname -I`(또는 `ip`) | 대상 노드 | 기본 설치분으로 충분 |
 
 > **`gossh` 는 v2 를 쓰십시오.** 구버전에는 명령 앞뒤 따옴표를 잘라내는 버그가 있어
@@ -36,8 +36,8 @@ Red Hat Enterprise Linux 대상 노드들의 **IP·게이트웨이 설정을 일
 ### 1.2 내려받아 빌드하기
 
 ```bash
-git clone https://github.com/qazx2675/myrepo.git
-cd "myrepo/.claude/HPC/ip_change"
+git clone -b ip-change-standalone https://github.com/qazx2675/myrepo.git ip_change
+cd ip_change
 ./setup.sh
 ```
 
@@ -47,6 +47,14 @@ cd "myrepo/.claude/HPC/ip_change"
 
 ```bash
 CGO_ENABLED=0 go build -o bin/ip-change-engine ./cmd/ip-change-engine
+```
+
+### RHEL 8 — 빌드 없이 바로 실행
+
+`bin/ip-change-engine_os8` 은 미리 빌드한 정적 바이너리(linux/amd64)입니다. Go 가 없어도 됩니다.
+
+```bash
+./bin/ip-change-engine_os8 -targets <대상목록> -gossh <gossh 경로> -u root -i ~/.ssh/id_rsa
 ```
 
 ### 1.3 설정 파일 채우기
