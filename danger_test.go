@@ -75,6 +75,7 @@ func TestParseConfirmHosts(t *testing.T) {
 		{"중복 제거", []string{"a,a|b a\n"}, []string{"a", "b"}},
 		{"빈 입력", nil, nil},
 		{"범위식 여러 개", []string{"h[1-2] g[08-10]\n"}, []string{"h1", "h2", "g08", "g09", "g10"}},
+		{"# 주석 줄 무시", []string{"# 그룹1\n", "a b\n", "  #x\n"}, []string{"a", "b"}},
 	}
 	for _, c := range cases {
 		got := parseConfirmHosts(c.lines)
@@ -134,5 +135,75 @@ func TestReadConfirmLines(t *testing.T) {
 	readConfirmLines(r)
 	if s, _ := r.ReadString('\n'); s != "y\n" {
 		t.Errorf("대조 뒤 y/N 응답이 남아 있어야 함: %q", s)
+	}
+}
+
+func TestConfirmLineEditor(t *testing.T) {
+	type res struct {
+		lines             []string
+		blanks, eof, intr int
+		echo              string
+	}
+	run := func(in string) res {
+		var e confirmLineEditor
+		var r res
+		for i := 0; i < len(in); i++ {
+			echo, ev := e.feed(in[i])
+			r.echo += echo
+			switch ev {
+			case confirmBlank:
+				r.blanks++
+			case confirmEOF:
+				r.eof++
+			case confirmIntr:
+				r.intr++
+			}
+		}
+		r.lines = e.finish()
+		return r
+	}
+	long := strings.Repeat("zzfakehost0001.invalid ", 300) // 터미널 한 줄 한계(4095자)보다 긴 가로 입력
+	cases := []struct {
+		name              string
+		in                string
+		lines             []string
+		blanks, eof, intr int
+	}{
+		{"CR 줄바꿈", "a\rb\r\r", []string{"a", "b"}, 1, 0, 0},
+		{"LF 줄바꿈", "a\nb\n\n", []string{"a", "b"}, 1, 0, 0},
+		{"CRLF 는 줄바꿈 하나(빈 줄 아님)", "a\r\nb\r\n\r", []string{"a", "b"}, 1, 0, 0},
+		{"CRLF Enter 로 친 빈 줄", "a\r\n\r\n", []string{"a"}, 1, 0, 0},
+		{"LFCR 은 빈 줄 하나", "a\n\r", []string{"a"}, 1, 0, 0},
+		{"긴 가로 입력", long + "\r", []string{long}, 0, 0, 0},
+		{"백스페이스", "ab\x7fc\x08d\r", []string{"ad"}, 0, 0, 0},
+		{"빈 줄 백스페이스는 무시", "\x7fa\r", []string{"a"}, 0, 0, 0},
+		{"Ctrl+U", "abc\x15x\r", []string{"x"}, 0, 0, 0},
+		{"방향키 시퀀스 버림", "a\x1b[Db\x1bOAc\r", []string{"abc"}, 0, 0, 0},
+		{"ESC 단독 뒤 글자는 살림", "\x1bnode01\r", []string{"node01"}, 0, 0, 0},
+		{"붙여넣기 안 빈 줄은 무시", "\x1b[200~a\r\r\rb\r\x1b[201~\r", []string{"a", "b"}, 1, 0, 0},
+		{"공백만 있는 줄은 빈 줄", "a\r  \t\r", []string{"a"}, 1, 0, 0},
+		{"빈 줄에서 Ctrl+D", "a\r\x04", []string{"a"}, 0, 1, 0},
+		{"줄 중간 Ctrl+D 무시", "a\x04b\r", []string{"ab"}, 0, 0, 0},
+		{"Ctrl+C", "a\x03", []string{"a"}, 0, 0, 1},
+		{"Ctrl+\\", "\x1c", nil, 0, 0, 1},
+		{"Ctrl+Z 무시", "a\x1ab\r", []string{"ab"}, 0, 0, 0},
+		{"Enter 없는 마지막 줄", "a\rb", []string{"a", "b"}, 0, 0, 0},
+		{"탭은 그대로", "a\tb\r", []string{"a\tb"}, 0, 0, 0},
+	}
+	for _, c := range cases {
+		got := run(c.in)
+		if !reflect.DeepEqual(got.lines, c.lines) || got.blanks != c.blanks || got.eof != c.eof || got.intr != c.intr {
+			t.Errorf("%s: got %q blank=%d eof=%d intr=%d, want %q blank=%d eof=%d intr=%d",
+				c.name, got.lines, got.blanks, got.eof, got.intr, c.lines, c.blanks, c.eof, c.intr)
+		}
+	}
+	// 한글 에코는 UTF-8 그대로 찍힌다
+	if r := run("# 그룹1\r"); r.echo != "# 그룹1\n" {
+		t.Errorf("한글 에코: %q", r.echo)
+	}
+	// 붙여 넣은 CRLF 목록(주석·빈 줄 포함)을 파싱하면 대상과 완전일치
+	r := run("\x1b[200~h1\r\nh2\r\n\r\n# 주석\r\nh[3-4]\r\n\x1b[201~")
+	if in, tg := diffHostSets([]string{"h1", "h2", "h3", "h4"}, parseConfirmHosts(r.lines)); in != nil || tg != nil || r.blanks != 0 {
+		t.Errorf("CRLF 붙여넣기 대조 실패: %v %v blank=%d", in, tg, r.blanks)
 	}
 }

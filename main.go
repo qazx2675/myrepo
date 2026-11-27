@@ -1480,7 +1480,11 @@ func confirmDanger(command string, hosts []string) int {
 	// ★ 호스트 재입력 대조: 목록을 눈으로만 확인하고 넘어가지 못하게, 대상 호스트를 다시 입력받아
 	// 순서·중복 무시하고 완전일치할 때만 y/N 단계로 간다. 다르거나 비어 있으면 차이를 보이고 종료코드 1.
 	fmt.Fprintln(os.Stderr, "확인을 위해 대상 호스트를 다시 입력하세요 (공백/쉼표/|/탭/줄바꿈 구분, 입력을 마치려면 빈 줄):")
-	inputHosts := parseConfirmHosts(readConfirmLines(stdinReader))
+	lines, ok := readConfirmTTY()
+	if !ok {
+		lines = readConfirmLines(stdinReader)
+	}
+	inputHosts := parseConfirmHosts(lines)
 	onlyInput, onlyTarget := diffHostSets(hosts, inputHosts)
 	if len(inputHosts) == 0 || len(onlyInput) > 0 || len(onlyTarget) > 0 {
 		fmt.Fprintln(os.Stderr, colorize(colorRed, "[확인 실패] 입력한 호스트가 대상과 일치하지 않습니다."))

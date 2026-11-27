@@ -21,6 +21,9 @@ func enableRaw(fd int) (restore func(), err error) {
 
 func watchResize(fd int, fn func(cols, rows int)) (stop func()) { return func() {} }
 
+// readConfirmTTY 는 리눅스에서만 터미널을 직접 읽는다. 그 밖의 OS 는 readConfirmLines 를 쓰게 한다.
+func readConfirmTTY() (lines []string, ok bool) { return nil, false }
+
 func promptPassword(prompt string) (string, error) {
 	fmt.Fprint(os.Stderr, prompt)
 	s, err := stdinReader.ReadString('\n')
