@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // ★ 기존 위험어 7개는 예전 동작 그대로 "소문자 부분일치"로 유지한다(호스트명·인자에 섞여도 거부하는 보수적 규칙).
@@ -70,10 +71,14 @@ func isDangerousCommand(cmd string) bool {
 
 // parseConfirmHosts 는 재입력된 줄들을 호스트 목록으로 바꾼다.
 // 구분자는 공백·탭·쉼표·| 이고, 각 토큰은 -w 와 같은 expandHostLine 으로 범위식을 펼친다. 중복은 제거한다.
+// -w 파일처럼 # 으로 시작하는 줄은 주석으로 보고 건너뛴다(호스트 파일 내용을 그대로 붙여 넣어도 일치하게).
 func parseConfirmHosts(lines []string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
 		for _, tok := range strings.FieldsFunc(line, func(r rune) bool {
 			return r == ',' || r == '|' || unicode.IsSpace(r)
 		}) {
@@ -123,4 +128,106 @@ func readConfirmLines(r *bufio.Reader) []string {
 		}
 	}
 	return lines
+}
+
+/// confirmLineEditor 는 터미널에서 줄 버퍼링 없이 한 바이트씩 읽은 재입력을 줄로 조립한다(readConfirmTTY 가 씀).
+// 터미널의 줄 단위 입력은 한 줄 4095자에서 잘리고, CRLF 로 붙여 넣으면 줄마다 빈 줄이 생겨 첫 줄에서 끝났다.
+// 그래서 CR·LF·CRLF 를 모두 줄바꿈 하나로 보고, 에코·백스페이스·Ctrl+U 는 여기서 직접 처리한다.
+// 브래킷 붙여넣기(ESC[200~ ... ESC[201~) 안의 빈 줄은 입력 끝으로 보지 않는다.
+type confirmLineEditor struct {
+	lines   []string
+	cur     []byte
+	lastCR  bool   // 바로 앞 바이트가 CR 이면 뒤따르는 LF 는 같은 줄바꿈이다
+	esc     int    // 0 보통, 1 ESC 직후, 2 ESC [ 또는 ESC O 시퀀스 안(방향키 등은 버린다)
+	escArg  []byte // 시퀀스 인자(붙여넣기 시작 200~ / 끝 201~ 판별용)
+	inPaste bool   // 브래킷 붙여넣기 안
+}
+
+// feed 가 돌려주는 사건
+const (
+	confirmNone  = iota
+	confirmBlank // 빈 줄(공백만 있는 줄 포함)에서 Enter (붙여넣기 밖)
+	confirmEOF   // 빈 줄에서 Ctrl+D
+	confirmIntr  // Ctrl+C 또는 Ctrl+\
+)
+
+// feed 는 한 바이트를 처리하고 화면에 찍을 에코와 사건을 돌려준다.
+func (e *confirmLineEditor) feed(b byte) (echo string, ev int) {
+	cr := e.lastCR
+	e.lastCR = false
+	switch e.esc {
+	case 1:
+		if b == '[' || b == 'O' {
+			e.esc = 2
+			e.escArg = e.escArg[:0]
+			return "", confirmNone
+		}
+		e.esc = 0 // ESC 단독(또는 Alt+키): ESC 만 버리고 이 바이트는 보통대로 처리
+	case 2:
+		if b >= 0x40 && b <= 0x7e {
+			e.esc = 0
+			if b == '~' {
+				switch string(e.escArg) {
+				case "200":
+					e.inPaste = true
+				case "201":
+					e.inPaste = false
+				}
+			}
+		} else if len(e.escArg) < 16 {
+			e.escArg = append(e.escArg, b)
+		}
+		return "", confirmNone
+	}
+	switch {
+	case b == '\r' || b == '\n':
+		if b == '\n' && cr {
+			return "", confirmNone // CRLF 의 LF
+		}
+		e.lastCR = b == '\r'
+		line := string(e.cur)
+		e.cur = e.cur[:0]
+		if strings.TrimSpace(line) != "" {
+			e.lines = append(e.lines, line)
+			return "\n", confirmNone
+		}
+		if e.inPaste {
+			return "\n", confirmNone // 붙여 넣은 목록 안의 빈 줄
+		}
+		return "\n", confirmBlank
+	case b == 0x03 || b == 0x1c: // Ctrl+C, Ctrl+\ (재입력 동안 ISIG 를 꺼서 바이트로 들어온다)
+		return "", confirmIntr
+	case b == 0x7f || b == 0x08: // 백스페이스
+		if len(e.cur) == 0 {
+			return "", confirmNone
+		}
+		_, n := utf8.DecodeLastRune(e.cur)
+		e.cur = e.cur[:len(e.cur)-n]
+		return "\b \b", confirmNone
+	case b == 0x15: // Ctrl+U: 현재 줄 지우기
+		echo = strings.Repeat("\b \b", utf8.RuneCount(e.cur))
+		e.cur = e.cur[:0]
+		return echo, confirmNone
+	case b == 0x04: // Ctrl+D: 빈 줄에서만 입력 끝
+		if len(e.cur) == 0 {
+			return "", confirmEOF
+		}
+		return "", confirmNone
+	case b == 0x1b:
+		e.esc = 1
+		return "", confirmNone
+	case b == '\t' || b >= 0x20:
+		e.cur = append(e.cur, b)
+		return string([]byte{b}), confirmNone // UTF-8 바이트를 그대로 찍는다(string(b) 는 룬 변환이라 한글이 깨짐)
+	}
+	return "", confirmNone // 그 밖의 제어문자(Ctrl+Z 등)는 무시
+}
+
+// finish 는 Enter 없이 끝난 마지막 줄까지 포함한 입력 줄을 돌려준다.
+func (e *confirmLineEditor) finish() []string {
+	if strings.TrimSpace(string(e.cur)) != "" {
+		e.lines = append(e.lines, string(e.cur))
+		e.cur = e.cur[:0]
+	}
+	return e.lines
 }
