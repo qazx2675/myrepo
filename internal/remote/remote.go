@@ -22,7 +22,7 @@ import (
 
 // Options 는 gossh 호출 옵션입니다.
 type Options struct {
-	GosshPath   string // 기본 "gossh"
+	GosshPath   string // gossh 실행 파일 (FindGossh 로 찾은 경로). 비어 있으면 "gossh"
 	User        string
 	Password    string
 	KeyPath     string
@@ -39,7 +39,29 @@ type Options struct {
 // Result 는 노드 한 대의 실행 결과입니다.
 type Result struct {
 	Host  string
-	Lines []string
+	Lines []string // gossh 표준출력(노드 출력)
+	Errs  []string // gossh 표준에러 중 이 호스트의 줄 (접속 실패 사유 등)
+
+	// PasswordTried 는 패스워드로 다시 시도한 호스트입니다.
+	PasswordTried bool
+	// Note 는 엔진이 정한 실패 사유입니다 (예: 패스워드를 입력받지 못함).
+	Note string
+}
+
+// authFailText 는 gossh 가 키 인증 실패 때 표준에러에 남기는 문구입니다.
+const authFailText = "unable to authenticate"
+
+// AuthFailed 는 노드 출력 없이 SSH 인증이 실패한 호스트인지 알려줍니다.
+func (r Result) AuthFailed() bool {
+	if len(r.Lines) > 0 {
+		return false
+	}
+	for _, e := range r.Errs {
+		if strings.Contains(e, authFailText) {
+			return true
+		}
+	}
+	return false
 }
 
 // WriteHostFile 은 호스트 목록을 임시 파일로 떨궈 gossh -w 에 넘길 경로를 돌려줍니다.
@@ -165,7 +187,47 @@ func Run(hostFile, command string, o Options) ([]Result, string, error) {
 		raw += s
 	}
 	// gossh 는 일부 노드가 실패해도 0 이 아닐 수 있으므로, 출력은 항상 파싱합니다.
-	return parse(stdout.String()), raw, err
+	return attachErrs(parse(stdout.String()), stderr.String()), raw, err
+}
+
+// attachErrs 는 gossh 표준에러의 "<host>: <내용>" 줄을 호스트별로 Result 에 붙입니다.
+// 표준출력이 없는 호스트(접속 실패 등)도 Result 로 남깁니다. 같은 줄은 한 번만 넣습니다.
+func attachErrs(results []Result, stderr string) []Result {
+	errs := map[string][]string{}
+	sc := bufio.NewScanner(strings.NewReader(stderr))
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for sc.Scan() {
+		host, body, ok := splitHostLine(sc.Text())
+		if !ok {
+			continue
+		}
+		dup := false
+		for _, e := range errs[host] {
+			if e == body {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			errs[host] = append(errs[host], body)
+		}
+	}
+	if len(errs) == 0 {
+		return results
+	}
+	idx := map[string]int{}
+	for i, r := range results {
+		idx[r.Host] = i
+	}
+	for h, e := range errs {
+		if i, ok := idx[h]; ok {
+			results[i].Errs = e
+		} else {
+			results = append(results, Result{Host: h, Errs: e})
+		}
+	}
+	sort.Slice(results, func(i, j int) bool { return results[i].Host < results[j].Host })
+	return results
 }
 
 // scanHostLines 는 r 을 끝까지 읽어 buf 에 그대로 모으면서, "<host>: <내용>"

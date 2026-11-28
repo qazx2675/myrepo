@@ -82,3 +82,35 @@ func TestParse(t *testing.T) {
 		t.Fatalf("unexpected host2 result: %+v", results[1])
 	}
 }
+
+func TestAttachErrsAuthFailed(t *testing.T) {
+	out := parse("h1: RESULT|OK|h1\n")
+	errs := "h2: ERROR: SSH 접속 실패: ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey]\nh2: ERROR: SSH 접속 실패: ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey]\nh3: ERROR: SSH 접속 실패: i/o timeout\n"
+	res := attachErrs(out, errs)
+	if len(res) != 3 {
+		t.Fatalf("want 3 hosts, got %+v", res)
+	}
+	if res[0].AuthFailed() || !res[1].AuthFailed() || res[2].AuthFailed() {
+		t.Fatalf("AuthFailed 판정이 틀립니다: %+v", res)
+	}
+	if len(res[1].Errs) != 1 {
+		t.Fatalf("같은 줄이 중복으로 들어갔습니다: %+v", res[1])
+	}
+}
+
+func TestFindGosshEnvAndMissing(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("IP_CHANGE_GOSSH", "")
+	if _, err := FindGossh(""); err == nil || err.Error() != GosshNotFound {
+		t.Fatalf("want GosshNotFound, got %v", err)
+	}
+	dir := t.TempDir()
+	p := dir + "/mygossh"
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("IP_CHANGE_GOSSH", p)
+	if got, err := FindGossh(""); err != nil || got != p {
+		t.Fatalf("env 경로: got %q, %v", got, err)
+	}
+}

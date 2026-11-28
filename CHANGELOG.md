@@ -1,5 +1,24 @@
 # CHANGELOG.md — ip_change
 
+## 2026-11-28 — 설정 파일만 바꾸는 방식으로 재설계 (RHEL 6~10, DHCP·keyfile·새 프로필)
+
+> **RHEL 10 keyfile 양식(새 프로필 생성·keyfile 변경)은 잠정안이며, 이후 사용자 요청에 따라 바뀔 수 있습니다.**
+
+- 장치 선택: `SSH_CONNECTION` 의 서버 IP 를 가진 장치만 바꿈(없으면 default route 장치). usb0 등은 선택되지 않음. 링크가 내려가 있으면 WARN(`link down`).
+- 설정 파일 탐색을 IP 값이 아니라 장치 이름 기준으로 변경(nmcli 읽기 조회 → ifcfg → keyfile). 그래서 DHCP ifcfg(IPADDR 없음)와 두 번째 실행도 같은 파일을 찾음. 결과에 OS 버전과 파일 경로 표시.
+- ifcfg 와 NetworkManager keyfile(`.nmconnection`) 둘 다 지원. RHEL 6~10.
+- DHCP → 고정 전환(`BOOTPROTO=none` / `method=manual`, IP·넷마스크·게이트웨이 기록, DNS 는 쓰지 않음).
+- 설정 파일이 없으면 새 프로필 생성(이더넷·bond·bond 포트·VLAN). bond 기본 active-backup, `-bond-mode lacp` 는 802.3ad. bridge·team 등은 FAIL.
+- 이미 바뀐 노드는 `OK (already)` 로 두고 파일·백업을 건드리지 않음.
+- OK 는 "재부팅 뒤에도 새 IP 유지" 점검(파일·넷마스크·ONBOOT·경쟁 프로필·링크·예전 게이트웨이)을 통과해야 함. 걸리면 WARN. 결과 줄은 `RESULT|<상태>|host|기존IP|새IP|GW|장치|방식|OS|파일|비고` 로 확장(상태에 WARN·CHECK 추가).
+- 예전 게이트웨이(`/etc/sysconfig/network`, `route-<장치>`)는 첫 실행에서 WARN 만 하고, 끝에 한 번 묻고(`[y/N]`) 고침. `-fix-gateway` 는 묻지 않음. 새 `internal/render/fixgw_body.sh`.
+- 백업을 `/var/lib/ip_change/backup/<STAMP>/`(원래 전체 경로) + `manifest` 로 이동. 설정 디렉토리에 `.bak` 을 두지 않음(NetworkManager·network 서비스가 추가 프로필로 읽을 위험). 롤백은 manifest 기준(modified 복원·created 는 `.removed` 로 이동), 백업 디렉토리가 없으면 예전 `.bak.<STAMP>` 방식.
+- 명령줄: `ip-change-engine_os8 list` 만으로 동작(목록 파일은 위치 인자, `-targets` 는 별칭). 설정 파일은 선택(`-config`, `./ip_change.conf`, 실행 파일 옆 `conf/`). 새 옵션 `-check`, `-fix-gateway`, `-bond-mode`. `-p` 는 값을 받지 않고 키 인증이 실패한 노드에만 패스워드를 물음(`internal/remote/runner.go`, `tty_*.go`).
+- gossh 자동 탐색: `-gossh` → 환경변수 `IP_CHANGE_GOSSH` → 바이너리 옆 → PATH. 못 찾으면 안내 후 종료.
+- 결과 표(`hostname | 결과 | 기존IP -> 새IP | 장치 | 방식 | OS | 설정파일 | 비고`)와 요약, 결과 파일 `ip_change_result_<시각>.txt`(`-check` 는 `ip_change_check_<시각>.txt`).
+- `scripts/run_ip_change.sh`: 목록 파일을 위치 인자로 넘기고 `-check`, `-fix-gateway`, `-bond-mode`, `-p` 를 전달.
+- 알려진 영향: DHCP → 고정 시 DNS 를 쓰지 않음, 재부팅 전 NetworkManager 메모리는 옛 값 유지(nmcli 쓰기 명령은 쓰지 않음), `-p` 패스워드는 프로세스 목록에 보일 수 있음, master 의 통합 스크립트는 WARN 상태를 모를 수 있음.
+
 ## 2026-11-27 (추가) — usb0 제외, CRLF 처리
 
 - `DEVICE`(없으면 파일명)가 `usb0` 인 ifcfg 는 대상에서 제외.

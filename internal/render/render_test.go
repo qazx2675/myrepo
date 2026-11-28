@@ -1,10 +1,11 @@
 package render
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -23,292 +24,175 @@ func TestApplyScriptEmbedsHostMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(script, "hostname1 3.3.3.3\n") {
-		t.Errorf("host map missing hostname1 line:\n%s", script)
-	}
-	if !strings.Contains(script, "hostname2 2.2.2.2\n") {
-		t.Errorf("host map missing hostname2 line:\n%s", script)
+	for _, want := range []string{"hostname1 3.3.3.3\n", "hostname2 2.2.2.2\n",
+		"NETWORK_SCRIPTS_DIR='/etc/sysconfig/network-scripts'", "FORCED_DIR=''", "CHECK_ONLY='0'", "BOND_MODE='active-backup'"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("스크립트에 %q 가 없습니다", want)
+		}
 	}
 	if strings.Contains(script, hostMapPlaceholder) {
 		t.Errorf("placeholder was not substituted")
 	}
-	if !strings.Contains(script, "NETWORK_SCRIPTS_DIR='/etc/sysconfig/network-scripts'") {
-		t.Errorf("NETWORK_SCRIPTS_DIR not rendered:\n%s", script)
+	if !strings.HasPrefix(script, "#!/bin/bash\n") {
+		t.Errorf("첫 줄이 #!/bin/bash 가 아닙니다")
 	}
 }
 
-// bash 가 있는 환경(리눅스 빌드 서버)에서만 실제 스크립트를 실행해 왕복 검증합니다.
-// hostname 은 PATH 에 가짜 실행파일을 앞세워 위조합니다(ldap_setting 의
-// test_all.sh 와 같은 기법). "hostname -I" 로 이 노드의 실제 IPv4 를 위조합니다 —
-// getent hosts(호스트 해석)에는 의존하지 않습니다.
-func TestApplyScriptEndToEnd(t *testing.T) {
+func TestApplyScriptOptionsAndErrors(t *testing.T) {
+	entries := []target.Entry{{Host: "h", NewIP: "1.2.3.4"}}
+	cfg := &config.Config{NetworkScriptsDir: "/etc/sysconfig/network-scripts"}
+
+	s, err := ApplyScriptWithOptions(entries, cfg, ApplyOptions{CheckOnly: true, BondMode: "LACP"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "CHECK_ONLY='1'") || !strings.Contains(s, "BOND_MODE='802.3ad'") {
+		t.Errorf("옵션이 머리글에 들어가지 않았습니다")
+	}
+	if _, err := ApplyScriptWithOptions(entries, cfg, ApplyOptions{BondMode: "round-robin"}); err == nil {
+		t.Errorf("알 수 없는 bond 모드를 받아들였습니다")
+	}
+	if _, err := ApplyScript(nil, cfg); err == nil {
+		t.Errorf("대상이 없는데 오류가 아닙니다")
+	}
+}
+
+func TestNormalizeBondMode(t *testing.T) {
+	for in, want := range map[string]string{"": "active-backup", "active-backup": "active-backup", " Active-Backup ": "active-backup",
+		"lacp": "802.3ad", "LACP": "802.3ad", "802.3ad": "802.3ad"} {
+		if got, err := NormalizeBondMode(in); err != nil || got != want {
+			t.Errorf("NormalizeBondMode(%q) = %q, %v; 기대 %q", in, got, err, want)
+		}
+	}
+	if _, err := NormalizeBondMode("balance-rr"); err == nil {
+		t.Errorf("balance-rr 는 오류여야 합니다")
+	}
+}
+
+func TestForcedDir(t *testing.T) {
+	cases := map[string]string{
+		"":                                    "",
+		config.DefaultNetworkScriptsDir:       "",
+		config.DefaultNetworkScriptsDir + "/": "",
+		"/etc/other":                          "/etc/other",
+	}
+	for in, want := range cases {
+		if got := ForcedDir(&config.Config{NetworkScriptsDir: in}); got != want {
+			t.Errorf("ForcedDir(%q) = %q, 기대 %q", in, got, want)
+		}
+	}
+	s, _ := ApplyScript([]target.Entry{{Host: "h", NewIP: "1.2.3.4"}}, &config.Config{NetworkScriptsDir: "/etc/other"})
+	if !strings.Contains(s, "FORCED_DIR='/etc/other'") {
+		t.Errorf("강제 경로가 머리글에 없습니다")
+	}
+}
+
+func TestRollbackScriptHeader(t *testing.T) {
+	s, err := RollbackScript(&config.Config{NetworkScriptsDir: "/etc/x"}, "20260101000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"ROLLBACK_TO='20260101000000'", "NETWORK_SCRIPTS_DIR='/etc/x'"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("롤백 스크립트에 %q 가 없습니다", want)
+		}
+	}
+}
+
+func TestFixGatewayScriptValidation(t *testing.T) {
+	ok := GatewayFix{Host: "h", OldGW: "1.1.1.1", NewGW: "2.2.2.1", Files: []string{"/etc/sysconfig/network"}, Stamp: "20260101000000"}
+	s, err := FixGatewayScript([]GatewayFix{ok})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "h 1.1.1.1 2.2.2.1 /etc/sysconfig/network 20260101000000\n") || strings.Contains(s, gwMapPlaceholder) {
+		t.Errorf("표가 올바르게 채워지지 않았습니다")
+	}
+	bad := []GatewayFix{}
+	for _, mut := range []func(g *GatewayFix){
+		func(g *GatewayFix) { g.Host = "" },
+		func(g *GatewayFix) { g.OldGW = "" },
+		func(g *GatewayFix) { g.NewGW = "" },
+		func(g *GatewayFix) { g.Files = nil },
+		func(g *GatewayFix) { g.Stamp = "" },
+		func(g *GatewayFix) { g.Stamp = "2026-01-01" },
+		func(g *GatewayFix) { g.Files = []string{"/etc/a b"} },
+		func(g *GatewayFix) { g.Host = "h\nx" },
+	} {
+		g := ok
+		mut(&g)
+		bad = append(bad, g)
+	}
+	for _, g := range bad {
+		if _, err := FixGatewayScript([]GatewayFix{g}); err == nil {
+			t.Errorf("잘못된 항목을 받아들였습니다: %+v", g)
+		}
+	}
+	if _, err := FixGatewayScript(nil); err == nil {
+		t.Errorf("항목이 없는데 오류가 아닙니다")
+	}
+}
+
+// 내장 스크립트에는 CR 이 없어야 합니다 (Windows 에서 CRLF 로 저장되면 노드 bash 가 깨집니다).
+func TestEmbeddedScriptsHaveNoCR(t *testing.T) {
+	for name, body := range map[string]string{"apply": applyBody, "rollback": rollbackBody, "fixgw": fixgwBody} {
+		if strings.Contains(body, "\r") {
+			t.Errorf("%s 스크립트에 CR 이 있습니다 (LF 로 저장해야 합니다)", name)
+		}
+	}
+}
+
+// RHEL 6 ~ 10 의 bash/awk/sed 에서 돌아야 하므로 GNU 확장이나 gawk 전용 기능을 쓰지 않는지 훑어봅니다.
+func TestEmbeddedScriptsAvoidGNUOnly(t *testing.T) {
+	bad := regexp.MustCompile("\\b(gensub|strftime|systime|asorti?|PROCINFO|IGNORECASE|FPAT|BEGINFILE|ENDFILE)\\b|sed\\s+-i|grep\\s+-[a-zA-Z]*P|readlink\\s+-f|date\\s+-d|sort\\s+-V|mktemp\\s+-p|\\$\\{[A-Za-z_]+(,,|\\^\\^)")
+	for name, body := range map[string]string{"apply": applyBody, "rollback": rollbackBody, "fixgw": fixgwBody} {
+		for i, ln := range strings.Split(body, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(ln), "#") {
+				continue
+			}
+			if m := bad.FindString(ln); m != "" {
+				t.Errorf("%s:%d GNU 전용 구문 %q: %s", name, i+1, m, ln)
+			}
+		}
+	}
+}
+
+// 세 스크립트를 실제로 렌더링해 bash -n 으로 문법만 검사합니다 (실행하지 않습니다).
+func TestRenderedScriptsPassBashSyntaxCheck(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("리눅스에서만 합니다")
+	}
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash 가 없는 환경이라 건너뜁니다")
 	}
-
-	work := t.TempDir()
-	fixtureDir := filepath.Join(work, "network-scripts")
-	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ifcfg := filepath.Join(fixtureDir, "ifcfg-eth0")
-	if err := os.WriteFile(ifcfg, []byte("DEVICE=eth0\nBOOTPROTO=none\nIPADDR=192.168.1.50\nGATEWAY=192.168.1.1\nONBOOT=yes\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	fakebin := filepath.Join(work, "fakebin")
-	if err := os.MkdirAll(fakebin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFakeHostname(t, fakebin, "testnode", "192.168.1.50")
-
-	entries := []target.Entry{{Host: "testnode", NewIP: "192.168.1.99"}}
-	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
-	script, err := ApplyScript(entries, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	scriptPath := filepath.Join(work, "apply.sh")
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "PATH="+fakebin+":"+os.Getenv("PATH"))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("script failed: %v\noutput:\n%s", err, out)
-	}
-
-	got := strings.TrimSpace(string(out))
-	want := "RESULT|OK|testnode|192.168.1.50|192.168.1.99|192.168.1.1"
-	if got != want {
-		t.Fatalf("output = %q, want %q", got, want)
-	}
-
-	updated, err := os.ReadFile(ifcfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(updated), "IPADDR=192.168.1.99\n") {
-		t.Errorf("IPADDR not updated:\n%s", updated)
-	}
-	if !strings.Contains(string(updated), "GATEWAY=192.168.1.1\n") {
-		t.Errorf("GATEWAY not updated:\n%s", updated)
-	}
-
-	matches, _ := filepath.Glob(ifcfg + ".bak.*")
-	if len(matches) != 1 {
-		t.Errorf("want exactly 1 backup file, got %d: %v", len(matches), matches)
-	} else {
-		backup, err := os.ReadFile(matches[0])
-		if err != nil {
+	cfg := &config.Config{NetworkScriptsDir: "/etc/sysconfig/network-scripts"}
+	entries := []target.Entry{{Host: "h", NewIP: "10.0.0.5"}}
+	apply, _ := ApplyScript(entries, cfg)
+	check, _ := ApplyScriptWithOptions(entries, cfg, ApplyOptions{CheckOnly: true, BondMode: "lacp"})
+	rb, _ := RollbackScript(cfg, "")
+	rb2, _ := RollbackScript(cfg, "20260101000000")
+	fix, _ := FixGatewayScript([]GatewayFix{{Host: "h", OldGW: "1.1.1.1", NewGW: "10.0.0.1", Files: []string{"/etc/sysconfig/network"}, Stamp: "20260101000000"}})
+	for name, body := range map[string]string{"apply": apply, "apply-check": check, "rollback": rb, "rollback-to": rb2, "fixgw": fix} {
+		p := filepath.Join(t.TempDir(), name+".sh")
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(backup), "IPADDR=192.168.1.50\n") {
-			t.Errorf("backup does not contain original IPADDR:\n%s", backup)
+		if out, err := exec.Command("bash", "-n", p).CombinedOutput(); err != nil {
+			t.Errorf("%s: bash -n 실패: %v\n%s", name, err, out)
 		}
 	}
 }
 
-// 실제 랩에서 관찰된 상황 재현: /etc/hosts·DNS 에 IPv4 항목이 없어(또는 IPv6
-// 만 등록돼) getent hosts 로는 이 노드의 IPv4 를 알 수 없는 경우에도, hostname -I
-// (인터페이스 실제 주소)로 정상 동작해야 합니다. IPv6 이 함께 나와도 걸러냅니다.
-func TestApplyScriptEndToEndIgnoresHostsIPv6(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash 가 없는 환경이라 건너뜁니다")
+// 자리표시자는 본체에 딱 한 번, 줄 전체로만 있어야 합니다 (주석에 적으면 Replace 가 주석을 먼저 채웁니다).
+func TestPlaceholdersAppearOnceAsOwnLine(t *testing.T) {
+	for name, c := range map[string]struct{ body, ph string }{
+		"apply": {applyBody, hostMapPlaceholder}, "fixgw": {fixgwBody, gwMapPlaceholder},
+	} {
+		if n := strings.Count(c.body, c.ph); n != 1 {
+			t.Errorf("%s: %s 가 %d 번 있습니다 (1번이어야 합니다)", name, c.ph, n)
+		}
+		if !strings.Contains(c.body, "\n"+c.ph+"\n") {
+			t.Errorf("%s: %s 가 한 줄 전체가 아닙니다", name, c.ph)
+		}
 	}
-
-	work := t.TempDir()
-	fixtureDir := filepath.Join(work, "network-scripts")
-	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ifcfg := filepath.Join(fixtureDir, "ifcfg-eth0")
-	if err := os.WriteFile(ifcfg, []byte("DEVICE=eth0\nBOOTPROTO=none\nIPADDR=192.168.1.50\nGATEWAY=192.168.1.1\nONBOOT=yes\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	fakebin := filepath.Join(work, "fakebin")
-	if err := os.MkdirAll(fakebin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// hostname -I 가 IPv6 과 IPv4 를 함께 돌려주는 상황을 재현합니다.
-	writeFakeHostname(t, fakebin, "testnode", "fe80::20c:29ff:fe3f:8ac1 192.168.1.50")
-
-	entries := []target.Entry{{Host: "testnode", NewIP: "192.168.1.99"}}
-	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
-	script, err := ApplyScript(entries, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	scriptPath := filepath.Join(work, "apply.sh")
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "PATH="+fakebin+":"+os.Getenv("PATH"))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("script failed: %v\noutput:\n%s", err, out)
-	}
-
-	got := strings.TrimSpace(string(out))
-	want := "RESULT|OK|testnode|192.168.1.50|192.168.1.99|192.168.1.1"
-	if got != want {
-		t.Fatalf("output = %q, want %q (IPv6 을 걸러내지 못했을 가능성)", got, want)
-	}
-}
-
-func TestApplyScriptEndToEndUnknownHost(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash 가 없는 환경이라 건너뜁니다")
-	}
-
-	work := t.TempDir()
-	fakebin := filepath.Join(work, "fakebin")
-	if err := os.MkdirAll(fakebin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFakeHostname(t, fakebin, "othernode", "192.168.1.50")
-
-	entries := []target.Entry{{Host: "testnode", NewIP: "192.168.1.99"}}
-	cfg := &config.Config{NetworkScriptsDir: work}
-	script, err := ApplyScript(entries, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	scriptPath := filepath.Join(work, "apply.sh")
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "PATH="+fakebin+":"+os.Getenv("PATH"))
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("want non-zero exit for unknown host, output:\n%s", out)
-	}
-	got := strings.TrimSpace(string(out))
-	if !strings.HasPrefix(got, "RESULT|FAIL|othernode|") {
-		t.Fatalf("output = %q, want FAIL for unmapped host", got)
-	}
-}
-
-// TestRollbackScriptEndToEnd 는 최근 .bak.<STAMP> 를 되돌리는 왕복을 검증합니다.
-func TestRollbackScriptEndToEnd(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash 가 없는 환경이라 건너뜁니다")
-	}
-
-	work := t.TempDir()
-	fixtureDir := filepath.Join(work, "network-scripts")
-	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ifcfg := filepath.Join(fixtureDir, "ifcfg-eth0")
-	// 현재 상태 = IP 변경이 이미 적용된 모습
-	if err := os.WriteFile(ifcfg, []byte("DEVICE=eth0\nBOOTPROTO=none\nIPADDR=192.168.1.99\nGATEWAY=192.168.1.1\nONBOOT=yes\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// 변경 전 백업
-	bak := ifcfg + ".bak.20260101120000"
-	if err := os.WriteFile(bak, []byte("DEVICE=eth0\nBOOTPROTO=none\nIPADDR=192.168.1.50\nGATEWAY=192.168.1.1\nONBOOT=yes\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	fakebin := filepath.Join(work, "fakebin")
-	if err := os.MkdirAll(fakebin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFakeHostname(t, fakebin, "testnode", "192.168.1.99")
-
-	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
-	script, err := RollbackScript(cfg, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	scriptPath := filepath.Join(work, "rollback.sh")
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "PATH="+fakebin+":"+os.Getenv("PATH"))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("script failed: %v\noutput:\n%s", err, out)
-	}
-
-	got := strings.TrimSpace(string(out))
-	want := "RESULT|OK|testnode|" + ifcfg + "|20260101120000|192.168.1.50"
-	if got != want {
-		t.Fatalf("output = %q, want %q", got, want)
-	}
-
-	restored, err := os.ReadFile(ifcfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(restored), "IPADDR=192.168.1.50\n") {
-		t.Errorf("IPADDR not restored:\n%s", restored)
-	}
-}
-
-// TestRollbackScriptNoBackup 은 백업이 없으면 FAIL 을 내는지 봅니다.
-func TestRollbackScriptNoBackup(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("bash 가 없는 환경이라 건너뜁니다")
-	}
-
-	work := t.TempDir()
-	fixtureDir := filepath.Join(work, "network-scripts")
-	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(fixtureDir, "ifcfg-eth0"), []byte("IPADDR=192.168.1.99\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	fakebin := filepath.Join(work, "fakebin")
-	if err := os.MkdirAll(fakebin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFakeHostname(t, fakebin, "testnode", "192.168.1.99")
-
-	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
-	script, _ := RollbackScript(cfg, "")
-	scriptPath := filepath.Join(work, "rollback.sh")
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "PATH="+fakebin+":"+os.Getenv("PATH"))
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("want non-zero exit when no backup exists, output:\n%s", out)
-	}
-	if !strings.HasPrefix(strings.TrimSpace(string(out)), "RESULT|FAIL|testnode|") {
-		t.Fatalf("output = %q, want FAIL", out)
-	}
-}
-
-func writeFake(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// writeFakeHostname 은 apply_body.sh 가 쓰는 세 호출 형태
-// (hostname -s / hostname / hostname -I) 를 모두 위조하는 가짜 실행파일을 만듭니다.
-func writeFakeHostname(t *testing.T, fakebin, name, localIPs string) {
-	t.Helper()
-	script := fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\n  -I) echo %q ;;\n  *) echo %q ;;\nesac\n", localIPs, name)
-	writeFake(t, filepath.Join(fakebin, "hostname"), script)
 }

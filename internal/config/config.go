@@ -14,8 +14,11 @@ import (
 const DefaultNetworkScriptsDir = "/etc/sysconfig/network-scripts"
 
 // Config 는 ip_change.conf 전체입니다.
+//
+// 두 키 모두 "강제 경로" 이며 보통은 필요 없습니다. 노드는 기본적으로 nmcli 조회와
+// ifcfg/keyfile 디렉토리를 스스로 찾습니다. 노드의 설정 위치가 표준과 다를 때만 지정합니다.
 type Config struct {
-	// NetworkScriptsDir 는 RHEL 8 이하(및 현재의 RHEL 9)에서 ifcfg-* 를 찾을 경로입니다.
+	// NetworkScriptsDir 는 ifcfg-* 를 찾을 강제 경로입니다. 기본값과 같으면 강제로 보지 않습니다.
 	NetworkScriptsDir string
 	// RHEL9Path 는 추후 RHEL 9 이상에서 기본 네트워크 설정 경로 방식이 바뀔 경우를
 	// 대비한 자리입니다. 비어 있으면 무시하고 NetworkScriptsDir 를 그대로 씁니다.
@@ -26,7 +29,7 @@ type Config struct {
 }
 
 // Load 는 지정한 경로의 설정 파일을 읽어 Config 로 만듭니다.
-// 파일이 없으면 기본값으로 채운 Config 를 돌려줍니다(있으면 좋고 없어도 되는 설정).
+// path 가 ""이거나 파일이 없으면 기본값으로 채운 Config 를 돌려줍니다(없어도 되는 설정).
 func Load(path string) (*Config, error) {
 	cfg := &Config{NetworkScriptsDir: DefaultNetworkScriptsDir}
 
